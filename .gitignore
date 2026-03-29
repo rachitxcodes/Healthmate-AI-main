@@ -1,0 +1,71 @@
+# ==============================
+# 🐍 Python
+# ==============================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.pkl
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+
+# Test / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# ==============================
+# ⚛️ Node / React
+# ==============================
+
+node_modules/
+dist/
+build/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Vite specific
+vite.svg
+
+# ==============================
+# 🔐 Environment Variables
+# ==============================
+
+.env
+.env.*
+!.env.example
+
+# ==============================
+# 🖥 OS / Editor
+# ==============================
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ==============================
+# 📊 Data Files (optional)
+# ==============================
+
+*.csv
+*.sqlite3
+*.db
+backend/app/__pycache__/main.cpython-313.pyc
+backend/app/__pycache__/ai_companion_api.cpython-313.pyc
+backend/app/__pycache__/symptom.cpython-313.pyc
+backend/app/__pycache__/prediction_api1.cpython-313.pyc
+backend/app/__pycache__/__init__.cpython-313.pyc
