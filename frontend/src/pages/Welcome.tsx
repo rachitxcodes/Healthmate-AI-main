@@ -2,7 +2,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import FeatureTiles from "../components/FeatureTile";
-import heroVideo from "../assets/FrontendVid.mp4";
 
 export default function Welcome() {
   const navigate = useNavigate();
@@ -81,15 +80,6 @@ export default function Welcome() {
             className="relative overflow-hidden rounded-[2.5rem] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.06)] border border-slate-200/80 p-2"
           >
             <div className="rounded-[2rem] overflow-hidden relative">
-              <video
-                className="w-full h-full object-cover rounded-[2rem] opacity-95"
-                autoPlay
-                muted
-                loop
-                playsInline
-                src={heroVideo}
-              />
-              {/* Inner glow overlay to make it look embedded */}
               <div className="absolute inset-0 rounded-[2rem] ring-1 ring-inset ring-slate-900/10 pointer-events-none" />
             </div>
           </motion.div>
