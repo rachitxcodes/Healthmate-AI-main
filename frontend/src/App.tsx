@@ -12,6 +12,7 @@ import MedicineScheduler from "./pages/MedicineScheduler";
 import SymptomDecoder from "./pages/SymptomDecoder";
 import AiCompanion from "./pages/AiCompanion";
 import ProfileSettings from "./pages/ProfileSettings";
+import Vitals from "./pages/Vitals";
 import ReportResult from "./pages/ReportResult";
 import ReportHistoryDetails from "./pages/ReportHistoryDetails";
 import ProtectedRoute from "./utils/ProtectedRoute";
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/medicine-scheduler" element={<Private><MedicineScheduler /></Private>} />
         <Route path="/symptom-decoder" element={<Private><SymptomDecoder /></Private>} />
         <Route path="/ai-companion" element={<Private><AiCompanion /></Private>} />
+        <Route path="/vitals" element={<Private><Vitals /></Private>} />
         <Route path="/settings" element={<Private><ProfileSettings /></Private>} />
 
         {/* Fallback */}
