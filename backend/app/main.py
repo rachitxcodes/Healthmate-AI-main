@@ -23,11 +23,6 @@ SUPABASE_PROJECT_ID = os.getenv("SUPABASE_PROJECT_ID")
 SUPABASE_JWT_ISSUER = os.getenv("SUPABASE_JWT_ISSUER")
 OPENROUTER_API_KEY  = os.getenv("OPENROUTER_API_KEY")
 
-# if not SUPABASE_PROJECT_ID or not SUPABASE_JWT_ISSUER:
-#     raise RuntimeError("❌ Supabase env vars missing")  
-# if not OPENROUTER_API_KEY:
-#     raise RuntimeError("❌ OPENROUTER_API_KEY missing from .env")
-
 print("✅ Env loaded")
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -47,25 +42,7 @@ async def options_handler(path: str, request: Request):
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 async def get_current_user_id(authorization: str = Header(None)):
-    # if not authorization:
-    #     raise HTTPException(status_code=401, detail="Missing Authorization header")
-    # try:
-    #     scheme, token = authorization.split(" ")
-    #     if scheme.lower() != "bearer":
-    #         raise HTTPException(status_code=401, detail="Invalid auth scheme")
-    #     payload = jwt.decode(
-    #         token,
-    #         key="",
-    #         options={"verify_signature": False, "verify_aud": False, "verify_iss": False},
-    #     )
-    #     user_id = payload.get("sub")
-    #     if not user_id:
-    #         raise HTTPException(status_code=401, detail="Invalid token payload")
-    #     return user_id
-    # except Exception as e:
-    #     print("JWT PARSE ERROR:", e)
-    #     raise HTTPException(status_code=401, detail="Invalid token")
-    return "test user";
+    return "test user"
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 @app.on_event("startup")
@@ -114,7 +91,7 @@ async def extract_medical_values_via_llm(image_bytes: Any, mime_type: str) -> di
     # Try each model up to 3 rounds with delay between rounds
     for round in range(3):
         if round > 0:
-            wait = round * 30  # wait 30s, then 60s
+            wait = round * 30
             print(f"⏳ Round {round+1}: waiting {wait}s before retry...")
             await asyncio.sleep(wait)
 

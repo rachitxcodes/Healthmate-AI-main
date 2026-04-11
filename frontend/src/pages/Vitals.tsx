@@ -33,6 +33,8 @@ interface VitalsData {
   heart_rate: number;
   spo2: number;
   temperature: number;
+  steps?: number;
+  activity?: string;
   recorded_at: string;
   age_seconds: number;
   is_stale: boolean;
@@ -314,6 +316,22 @@ export default function Vitals() {
             </div>
           </GlassCard>
 
+          {/* Activity / Steps Card */}
+          <GlassCard className="!p-6 flex items-center gap-6 group hover:translate-y-[-4px]">
+            <div className="h-16 w-16 rounded-3xl bg-emerald-50 text-emerald-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+              <Activity size={32} />
+            </div>
+            <div>
+              <p className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-0.5">Daily Steps</p>
+              <h4 className="text-3xl font-black text-slate-800">
+                {vitals?.steps || "0"}<span className="text-sm text-slate-400 ml-1">steps</span>
+              </h4>
+              <p className="text-[10px] font-bold text-emerald-600 mt-1 uppercase bg-emerald-100/50 px-2 py-0.5 rounded-full inline-block">
+                {vitals?.activity || "Stable"}
+              </p>
+            </div>
+          </GlassCard>
+
           {/* Report Context Card */}
           <GlassCard className="!p-6 flex items-center gap-6 group hover:translate-y-[-4px] bg-slate-900 !border-slate-800">
             <div className="h-16 w-16 rounded-3xl bg-white/10 text-white flex items-center justify-center flex-shrink-0 group-hover:rotate-12 transition-transform">
@@ -338,6 +356,7 @@ export default function Vitals() {
                 <div className="flex gap-4 text-[10px] font-bold text-slate-400">
                   <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500" /> BPM</span>
                   <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /> SpO2</span>
+                  <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500" /> Temp °C</span>
                 </div>
               </div>
 
@@ -353,6 +372,10 @@ export default function Vitals() {
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                       </linearGradient>
+                      <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                      </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis
@@ -366,6 +389,7 @@ export default function Vitals() {
                     />
                     <Area type="monotone" dataKey="heart_rate" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorHr)" dot={false} />
                     <Area type="monotone" dataKey="spo2" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSpo2)" dot={false} />
+                    <Area type="monotone" dataKey="temperature" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
