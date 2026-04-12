@@ -320,6 +320,7 @@ async def post_vitals(body: VitalsIn, user: dict = Depends(get_current_user_api_
 
     # Save vitals
     try:
+        # Try full insert first
         supabase.table("vitals").insert({
             "user_id": user_id,
             "heart_rate": body.heart_rate,
@@ -329,10 +330,27 @@ async def post_vitals(body: VitalsIn, user: dict = Depends(get_current_user_api_
             "activity": body.activity,
             "recorded_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
-        print("✅ Vitals saved")
+        print("✅ Vitals saved (Complete)")
     except Exception as e:
-        print(f"❌ Save failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save")
+        error_msg = str(e).lower()
+        # Fallback if ANY motion columns are missing
+        if "column" in error_msg and ("steps" in error_msg or "activity" in error_msg):
+            print("⚠️ DB missing motion columns. Saving basic vitals (Pulse/Temp/SpO2) only.")
+            try:
+                supabase.table("vitals").insert({
+                    "user_id": user_id,
+                    "heart_rate": body.heart_rate,
+                    "spo2": body.spo2,
+                    "temperature": body.temperature,
+                    "recorded_at": datetime.now(timezone.utc).isoformat(),
+                }).execute()
+                print("✅ Basic Vitals saved successfully")
+            except Exception as e2:
+                print(f"❌ Basic save failed: {e2}")
+                raise HTTPException(status_code=500, detail="Database error")
+        else:
+            print(f"❌ Save failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save")
 
     # Get report risk
     report_risk = fetch_latest_report_risk(user_id)
@@ -398,14 +416,26 @@ async def get_latest_vitals(user: dict = Depends(get_frontend_user)):
     
     user_id = user["id"]
     try:
-        result = (
-            supabase.table("vitals")
-            .select("id, heart_rate, spo2, temperature, steps, activity, recorded_at")
-            .eq("user_id", user_id)
-            .order("recorded_at", desc=True)
-            .limit(1)
-            .execute()
-        )
+        # Try selecting all fields
+        try:
+            result = (
+                supabase.table("vitals")
+                .select("id, heart_rate, spo2, temperature, steps, activity, recorded_at")
+                .eq("user_id", user_id)
+                .order("recorded_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception:
+            # Fallback if columns are missing
+            result = (
+                supabase.table("vitals")
+                .select("id, heart_rate, spo2, temperature, recorded_at")
+                .eq("user_id", user_id)
+                .order("recorded_at", desc=True)
+                .limit(1)
+                .execute()
+            )
         
         if not result.data:
             raise HTTPException(status_code=404, detail="No vitals found")
@@ -428,7 +458,7 @@ async def get_latest_vitals(user: dict = Depends(get_frontend_user)):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ Error in get_latest_vitals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/vitals/history")
