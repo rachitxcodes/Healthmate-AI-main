@@ -70,31 +70,40 @@ export default function Vitals() {
 
       const headers = { Authorization: `Bearer ${session.access_token}` };
 
-      // 1. Fetch Latest Vitals
+      // 1. Fetch History (do this first to sync cards)
+      const historyResp = await fetch(`${API_BASE_URL}/api3/vitals/history?hours=24`, { headers });
+      let currentHistory: any[] = [];
+      if (historyResp.ok) {
+        const historyData = await historyResp.json();
+        currentHistory = historyData.readings || [];
+        setHistory(currentHistory);
+      }
+
+      // 2. Fetch Latest Vitals (as fallback/backup)
       const vitalsResp = await fetch(`${API_BASE_URL}/api3/vitals/latest`, { headers });
       if (vitalsResp.ok) {
         const vitalsData = await vitalsResp.json();
-        setVitals(vitalsData);
-      } else {
-        setVitals(null);
+        
+        // SYNC LOGIC: If we have history points, use the VERY LATEST point for the cards
+        if (currentHistory.length > 0) {
+          const latestPoint = currentHistory[currentHistory.length - 1];
+          setVitals({
+            ...vitalsData,
+            heart_rate: latestPoint.heart_rate,
+            spo2: latestPoint.spo2,
+            temperature: latestPoint.temperature,
+            recorded_at: latestPoint.recorded_at
+          });
+        } else {
+          setVitals(vitalsData);
+        }
       }
 
-      // 2. Fetch Risk Score
+      // 3. Fetch Risk Score
       const riskResp = await fetch(`${API_BASE_URL}/api3/risk-score`, { headers });
       if (riskResp.ok) {
         const riskData = await riskResp.json();
         setRisk(riskData);
-      } else {
-        setRisk(null);
-      }
-
-      // 3. Fetch History (last 24h)
-      const historyResp = await fetch(`${API_BASE_URL}/api3/vitals/history?hours=24`, { headers });
-      if (historyResp.ok) {
-        const historyData = await historyResp.json();
-        setHistory(historyData.readings || []);
-      } else {
-        setHistory([]);
       }
 
       setIsLoading(false);
@@ -105,14 +114,14 @@ export default function Vitals() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Poll every 10s
+    const interval = setInterval(fetchData, 5000); 
     return () => clearInterval(interval);
   }, []);
 
   // --- SOS Logic ---
   const startSosTimer = () => {
     setSosProgress(0);
-    const step = 2; // progress step
+    const step = 2; 
     sosTimerRef.current = setInterval(() => {
       setSosProgress(prev => {
         if (prev >= 100) {
@@ -122,7 +131,7 @@ export default function Vitals() {
         }
         return prev + step;
       });
-    }, 50); // ~2.5 seconds to fill
+    }, 50); 
   };
 
   const cancelSosTimer = () => {
@@ -156,269 +165,198 @@ export default function Vitals() {
   };
 
   const getRiskColor = (score: number) => {
-    if (score >= 71) return "#f43f5e"; // rose-500
-    if (score >= 41) return "#f59e0b"; // amber-500
-    return "#10b981"; // emerald-500
+    if (score >= 71) return "#f43f5e";
+    if (score >= 41) return "#f59e0b";
+    return "#10b981";
+  };
+
+  const formatTime = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return "";
+    }
   };
 
   if (isLoading && !vitals) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-          className="w-12 h-12 border-4 border-blue-100 border-t-blue-500 rounded-full"
-        />
+        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} className="w-12 h-12 border-4 border-blue-100 border-t-blue-500 rounded-full" />
         <p className="text-slate-400 font-bold animate-pulse">Initializing Health Monitor...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 sm:p-8 lg:p-12 max-w-7xl mx-auto space-y-10">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
 
       {/* ── HEADER ── */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">Vitals & Risk</h1>
-          <div className="flex items-center gap-3">
-            <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border shadow-sm ${getStatusColor(risk?.status)}`}>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Vitals Dashboard</h1>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border shadow-sm ${getStatusColor(risk?.status)}`}>
               {risk?.status || "Analyzing"}
             </span>
-            <div className="flex items-center gap-2 text-slate-400 text-sm font-semibold bg-white border border-slate-100 px-3 py-1.5 rounded-xl">
-              <Clock size={14} />
-              {vitals?.is_stale ? "Stale Data (Sensor Offline)" : "Live"}
+            <div className="flex items-center gap-1.5 text-blue-500 text-[10px] font-bold bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg shadow-sm">
+              <Clock size={12} className="animate-pulse" />
+              ONLINE SYNC
             </div>
           </div>
         </div>
 
-        {/* SOS Button with Long Press */}
-        <div className="relative group">
-          <motion.button
-            onMouseDown={startSosTimer}
-            onMouseUp={cancelSosTimer}
-            onMouseLeave={cancelSosTimer}
-            onTouchStart={startSosTimer}
-            onTouchEnd={cancelSosTimer}
-            disabled={sosLoading}
-            className={`
-              relative overflow-hidden px-10 py-4 rounded-[2rem] font-black text-white shadow-2xl transition-all active:scale-95
-              ${sosLoading ? "bg-slate-400 cursor-not-allowed" : "bg-gradient-to-r from-rose-500 to-red-600 hover:shadow-rose-500/30"}
-            `}
-          >
-            <div className="flex items-center gap-3 relative z-10">
-              <ShieldAlert size={20} className={sosProgress > 0 ? "animate-ping" : ""} />
-              {sosLoading ? "SENDING..." : "HOLD FOR SOS"}
-            </div>
-            {/* Progress Overlay */}
-            <div
-              className="absolute left-0 top-0 h-full bg-white/20 transition-all ease-linear"
-              style={{ width: `${sosProgress}%` }}
-            />
-          </motion.button>
-          <p className="absolute -bottom-6 left-0 w-full text-center text-[10px] text-slate-400 font-bold uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">
-            Emergency Contacts will be notified
-          </p>
-        </div>
+        <motion.button
+          onMouseDown={startSosTimer} onMouseUp={cancelSosTimer} onMouseLeave={cancelSosTimer}
+          onTouchStart={startSosTimer} onTouchEnd={cancelSosTimer}
+          disabled={sosLoading}
+          className={`
+            relative overflow-hidden px-8 py-3 rounded-2xl font-black text-white shadow-xl transition-all active:scale-95 text-sm
+            ${sosLoading ? "bg-slate-400" : "bg-gradient-to-r from-rose-500 to-red-600"}
+          `}
+        >
+          <div className="flex items-center gap-2 relative z-10">
+            <ShieldAlert size={18} className={sosProgress > 0 ? "animate-ping" : ""} />
+            {sosLoading ? "SENDING..." : "HOLD FOR SOS"}
+          </div>
+          <div className="absolute left-0 top-0 h-full bg-white/20 transition-all ease-linear" style={{ width: `${sosProgress}%` }} />
+        </motion.button>
       </header>
 
-      {/* ── MAIN GRID ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-        {/* Left: Risk Score Gauge (4 cols) */}
-        <GlassCard className="lg:col-span-5 flex flex-col items-center justify-center relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
-            <AlertTriangle size={80} className="text-slate-200" />
-          </div>
-
-          <h3 className="text-slate-400 font-black text-xs uppercase tracking-widest mb-10 w-full text-center">Unified Risk Index</h3>
-
-          <div className="relative w-64 h-64 flex items-center justify-center mb-10">
-            {/* SVG Progress Circle */}
-            <svg className="w-full h-full -rotate-90">
-              <circle cx="128" cy="128" r="110" stroke="currentColor" strokeWidth="20" fill="transparent" className="text-slate-50" />
-              <motion.circle
-                cx="128" cy="128" r="110"
-                stroke={getRiskColor(risk?.score || 0)}
-                strokeWidth="20"
-                fill="transparent"
-                strokeDasharray="691"
-                initial={{ strokeDashoffset: 691 }}
-                animate={{ strokeDashoffset: 691 - (691 * (risk?.score || 0)) / 100 }}
-                transition={{ duration: 1.5, ease: "easeOut" }}
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-6xl font-black text-slate-800"
-              >
-                {risk?.score || 0}
-              </motion.span>
-              <span className="text-slate-400 font-bold text-sm">/ 100</span>
+      {/* ── TOP METRICS STRIP ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Heart Rate", val: vitals?.heart_rate, unit: "BPM", icon: Heart, color: "rose", bg: "bg-rose-50" },
+          { label: "SpO2 (Oxygen)", val: vitals?.spo2, unit: "%", icon: Droplets, color: "blue", bg: "bg-blue-50" },
+          { label: "Temperature", val: vitals?.temperature, unit: "°C", icon: Thermometer, color: "amber", bg: "bg-amber-50" },
+          { label: "Steps", val: vitals?.steps, unit: "steps", icon: Activity, color: "emerald", bg: "bg-emerald-50", sub: vitals?.activity }
+        ].map((m, i) => (
+          <GlassCard key={i} className="!p-4 flex items-center gap-4 border-none shadow-sm hover:shadow-md transition-shadow">
+            <div className={`h-12 w-12 rounded-2xl ${m.bg} flex items-center justify-center flex-shrink-0 text-${m.color}-500`}>
+              <m.icon size={24} />
             </div>
-          </div>
-
-          <div className="w-full space-y-3 pb-4">
-            {risk?.breakdown && Object.entries(risk.breakdown).map(([key, val]) => (
-              typeof val === 'number' && val > 0 && (
-                <div key={key} className="flex justify-between items-center bg-slate-50/50 p-3 rounded-2xl border border-slate-100/50">
-                  <span className="text-xs font-bold text-slate-500 capitalize">{key.replace('_points', '')} contribution</span>
-                  <span className="text-xs font-black text-slate-700">+{val} pts</span>
-                </div>
-              )
-            ))}
-            {!risk?.breakdown && <p className="text-xs text-slate-400 italic text-center py-4">Waiting for detailed analysis...</p>}
-          </div>
-        </GlassCard>
-
-        {/* Right: Vitals Grid (8 cols) */}
-        <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6">
-
-          {/* Heart Rate Card */}
-          <GlassCard className="!p-6 flex items-center gap-6 group hover:translate-y-[-4px]">
-            <div className="h-16 w-16 rounded-3xl bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-              <Heart size={32} />
-            </div>
-            <div>
-              <p className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-0.5">Heart Rate</p>
-              <h4 className="text-3xl font-black text-slate-800">
-                {vitals?.heart_rate || "--"}<span className="text-sm text-slate-400 ml-1">BPM</span>
+            <div className="min-w-0">
+              <p className="text-slate-400 font-bold text-[10px] uppercase truncate">{m.label}</p>
+              <h4 className="text-xl font-black text-slate-800 flex items-baseline gap-1">
+                {m.val || "--"}<span className="text-[10px] text-slate-400 font-bold tracking-tighter">{m.unit}</span>
               </h4>
+              {m.sub && <p className="text-[9px] font-bold text-emerald-600 uppercase bg-emerald-50 px-1.5 rounded-md inline-block">{m.sub}</p>}
             </div>
           </GlassCard>
+        ))}
+      </div>
 
-          {/* SpO2 Card */}
-          <GlassCard className="!p-6 flex items-center gap-6 group hover:translate-y-[-4px]">
-            <div className="h-16 w-16 rounded-3xl bg-blue-50 text-blue-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-              <Droplets size={32} />
-            </div>
-            <div>
-              <p className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-0.5">SpO2</p>
-              <h4 className="text-3xl font-black text-slate-800">
-                {vitals?.spo2 || "--"}<span className="text-sm text-slate-400 ml-1">%</span>
-              </h4>
-            </div>
-          </GlassCard>
+      {/* ── MAIN ANALYTICS GRID ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-          {/* Temperature Card */}
-          <GlassCard className="!p-6 flex items-center gap-6 group hover:translate-y-[-4px]">
-            <div className="h-16 w-16 rounded-3xl bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-              <Thermometer size={32} />
-            </div>
-            <div>
-              <p className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-0.5">Temperature</p>
-              <h4 className="text-3xl font-black text-slate-800">
-                {vitals?.temperature || "--"}<span className="text-sm text-slate-400 ml-1">°C</span>
-              </h4>
-            </div>
-          </GlassCard>
-
-          {/* Activity / Steps Card */}
-          <GlassCard className="!p-6 flex items-center gap-6 group hover:translate-y-[-4px]">
-            <div className="h-16 w-16 rounded-3xl bg-emerald-50 text-emerald-500 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-              <Activity size={32} />
-            </div>
-            <div>
-              <p className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-0.5">Daily Steps</p>
-              <h4 className="text-3xl font-black text-slate-800">
-                {vitals?.steps || "0"}<span className="text-sm text-slate-400 ml-1">steps</span>
-              </h4>
-              <p className="text-[10px] font-bold text-emerald-600 mt-1 uppercase bg-emerald-100/50 px-2 py-0.5 rounded-full inline-block">
-                {vitals?.activity || "Stable"}
-              </p>
-            </div>
-          </GlassCard>
-
-          {/* Report Context Card */}
-          <GlassCard className="!p-6 flex items-center gap-6 group hover:translate-y-[-4px] bg-slate-900 !border-slate-800">
-            <div className="h-16 w-16 rounded-3xl bg-white/10 text-white flex items-center justify-center flex-shrink-0 group-hover:rotate-12 transition-transform">
-              <History size={32} />
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold text-[11px] uppercase tracking-wider mb-0.5">Report Link</p>
-              <p className="text-white font-bold text-sm leading-tight flex items-center gap-2">
-                {risk?.report_available ? "AI analyzing disease context" : "No report found"}
-                <ChevronRight size={14} />
-              </p>
-            </div>
-          </GlassCard>
-
-          {/* Trend Chart (Spans 2 cols) */}
-          <div className="sm:col-span-2">
-            <GlassCard className="!p-6 h-[340px]">
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-slate-800 font-black flex items-center gap-2 uppercase text-xs tracking-widest">
-                  <Activity size={16} className="text-blue-500" /> Vitals History (24h)
-                </h3>
-                <div className="flex gap-4 text-[10px] font-bold text-slate-400">
-                  <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500" /> BPM</span>
-                  <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /> SpO2</span>
-                  <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500" /> Temp °C</span>
-                </div>
+        {/* Sidebar: Risk (4 cols) */}
+        <div className="lg:col-span-4 space-y-6">
+          <GlassCard className="flex flex-col items-center justify-center py-10 relative overflow-hidden h-full">
+            <h3 className="text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] mb-8">Unified Risk Index</h3>
+            <div className="relative w-48 h-48 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90">
+                <circle cx="96" cy="96" r="80" stroke="#f1f5f9" strokeWidth="16" fill="transparent" />
+                <motion.circle
+                  cx="96" cy="96" r="80" stroke={getRiskColor(risk?.score || 0)} strokeWidth="16" fill="transparent"
+                  strokeDasharray="502" initial={{ strokeDashoffset: 502 }}
+                  animate={{ strokeDashoffset: 502 - (502 * (risk?.score || 0)) / 100 }}
+                  transition={{ duration: 1.5, ease: "easeOut" }} strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-5xl font-black text-slate-800">{risk?.score || 0}</span>
+                <span className="text-slate-400 font-bold text-[10px] uppercase">Safety Score</span>
               </div>
+            </div>
+            <div className="mt-8 w-full max-w-[240px] space-y-2">
+              {risk?.breakdown && Object.entries(risk.breakdown).map(([key, val]) => (
+                typeof val === 'number' && val > 0 && (
+                  <div key={key} className="flex justify-between items-center text-[10px] bg-slate-50/80 p-2 rounded-xl border border-slate-100">
+                  <span className="font-bold text-slate-500 uppercase tracking-tighter text-[9px]">{key}</span>
+                  <span className="font-black text-slate-700">{val}%</span>
+                  </div>
+                )
+              ))}
+            </div>
+          </GlassCard>
+        </div>
 
-              <div className="h-[240px] w-full">
+        {/* Charts: Insights (8 cols) */}
+        <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* Heart Rate Chart */}
+          <GlassCard className="!p-4 h-[240px]">
+             <div className="flex justify-between items-center mb-3">
+                <h3 className="text-slate-800 font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5">
+                  <Heart size={12} className="text-rose-500" /> HR Trend (BPM)
+                </h3>
+                <span className="text-[9px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100">Healthy Range: 60-100</span>
+             </div>
+             <div className="h-[160px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={history}>
                     <defs>
-                      <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1} />
-                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorSpo2" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                      </linearGradient>
+                      <linearGradient id="colorHr" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/><stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/></linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis
-                      dataKey="recorded_at"
-                      hide
-                    />
+                    <XAxis dataKey="recorded_at" tickFormatter={formatTime} hide />
                     <YAxis domain={['auto', 'auto']} hide />
-                    <Tooltip
-                      contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      labelFormatter={(label) => new Date(label).toLocaleTimeString()}
-                    />
+                    <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 20px -5px rgb(0 0 0 / 0.1)', fontSize: '12px' }} />
                     <Area type="monotone" dataKey="heart_rate" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorHr)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+             </div>
+          </GlassCard>
+
+          {/* SpO2 Chart */}
+          <GlassCard className="!p-4 h-[240px]">
+             <div className="flex justify-between items-center mb-3">
+                <h3 className="text-slate-800 font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5">
+                  <Droplets size={12} className="text-blue-500" /> Oxygen Trend (%)
+                </h3>
+                <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">Safe: &gt;94%</span>
+             </div>
+             <div className="h-[160px] w-full mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={history}>
+                    <defs>
+                      <linearGradient id="colorSpo2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="recorded_at" tickFormatter={formatTime} hide />
+                    <YAxis domain={[90, 100]} hide />
+                    <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 20px -5px rgb(0 0 0 / 0.1)', fontSize: '12px' }} />
                     <Area type="monotone" dataKey="spo2" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSpo2)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+             </div>
+          </GlassCard>
+
+          {/* Temperature Chart (Spans 2 cols for wide trend) */}
+          <GlassCard className="!p-4 h-[240px] md:col-span-2">
+             <div className="flex justify-between items-center mb-3">
+                <h3 className="text-slate-800 font-black uppercase text-[10px] tracking-widest flex items-center gap-1.5">
+                  <Thermometer size={12} className="text-amber-500" /> Body Temperature Drift
+                </h3>
+                <span className="text-[9px] font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100">Range: 36.2 - 37.2°C</span>
+             </div>
+             <div className="h-[160px] w-full mt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={history}>
+                    <defs>
+                      <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="recorded_at" tickFormatter={formatTime} tick={{ fontSize: 9, fontWeight: 'bold' }} stroke="#cbd5e1" />
+                    <YAxis domain={['auto', 'auto']} hide />
+                    <Tooltip contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 20px -5px rgb(0 0 0 / 0.1)', fontSize: '12px' }} />
                     <Area type="monotone" dataKey="temperature" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorTemp)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
-            </GlassCard>
-          </div>
+             </div>
+          </GlassCard>
+
         </div>
       </div>
-
-      {/* ── FOOTER GUIDANCE ── */}
-      <footer className="bg-blue-50/50 rounded-[2.5rem] p-8 border border-blue-100/50 flex flex-col md:flex-row gap-8 items-center justify-between">
-        <div className="flex gap-6 items-center flex-1">
-          <div className="bg-white p-4 rounded-[1.5rem] shadow-sm flex-shrink-0 text-blue-500">
-            <Info size={32} />
-          </div>
-          <div>
-            <h4 className="text-slate-800 font-black mb-1">How the score works</h4>
-            <p className="text-slate-500 text-sm leading-relaxed max-w-xl">
-              HealthMate AI combines live vitals from your wearable with historical medical reports and current symptoms to generate a unified risk score.
-              Scores above 70 trigger automated caregiver alerts.
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={fetchData}
-          className="text-blue-600 font-bold bg-white px-8 py-3 rounded-2xl border border-blue-200 hover:bg-blue-50 transition-colors shadow-sm whitespace-nowrap"
-        >
-          Check Now
-        </button>
-      </footer>
 
     </div>
   );

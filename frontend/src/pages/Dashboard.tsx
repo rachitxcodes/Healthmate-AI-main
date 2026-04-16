@@ -48,32 +48,32 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     setDataLoading(true);
     try {
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user!.id)
-        .single();
-      if (profileData) setFullName(profileData.full_name);
-
-      // Fetch reports
-      const reportHistory = await getReportHistory();
-      setReports(reportHistory);
-
-      // Fetch medicine stats + list
+      // 1. Get Token upfront to parallelize all API calls
       const token = await getAuthToken();
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [statsRes, medsRes] = await Promise.all([
+      // 2. Fire all requests in parallel
+      const [profileRes, reportHistory, statsRes, medsRes, historyRes] = await Promise.all([
+        supabase.from("profiles").select("full_name").eq("id", user!.id).single(),
+        getReportHistory(),
         fetch(`${API_URL}/api/medicines/stats`, { headers }).catch(() => null),
         fetch(`${API_URL}/api/medicines`, { headers }).catch(() => null),
+        fetch(`${API_URL}/api2/history`, { headers }).catch(() => null)
       ]);
 
+      // 3. Process Profile
+      if (profileRes?.data) setFullName(profileRes.data.full_name);
+
+      // 4. Process Reports
+      setReports(reportHistory || []);
+
+      // 5. Process Medicine Stats
       if (statsRes?.ok) {
         const statsData = await statsRes.json();
         setMedStats(statsData);
       }
 
+      // 6. Process Medicine List
       if (medsRes?.ok) {
         const medsData = await medsRes.json();
         const meds = medsData.medicines || [];
@@ -97,16 +97,13 @@ export default function Dashboard() {
         setUpcomingMedicines(upcoming);
       }
 
-      // Fetch latest AI chat message
-      try {
-        const historyRes = await fetch(`${API_URL}/api2/history`, { headers });
-        if (historyRes.ok) {
-          const historyData = await historyRes.json();
-          const msgs = historyData.messages || [];
-          const lastAi = [...msgs].reverse().find((m: any) => m.role === "assistant");
-          if (lastAi) setLatestAiMsg(lastAi.content);
-        }
-      } catch { /* non-critical */ }
+      // 7. Process AI History
+      if (historyRes?.ok) {
+        const historyData = await historyRes.json();
+        const msgs = historyData.messages || [];
+        const lastAi = [...msgs].reverse().find((m: any) => m.role === "assistant");
+        if (lastAi) setLatestAiMsg(lastAi.content);
+      }
 
     } catch (err) {
       console.warn("Dashboard load error:", err);

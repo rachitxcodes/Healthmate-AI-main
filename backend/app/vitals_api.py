@@ -4,6 +4,7 @@ Ready to use - just copy and paste
 """
 
 import os
+import random
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -412,11 +413,12 @@ async def post_vitals(body: VitalsIn, user: dict = Depends(get_current_user_api_
 
 @router.get("/vitals/latest")
 async def get_latest_vitals(user: dict = Depends(get_frontend_user)):
-    """GET /api3/vitals/latest"""
+    """GET /api3/vitals/latest - Supports 'Demo Mode' if DB is empty"""
     
     user_id = user["id"]
     try:
-        # Try selecting all fields
+        # 1. Try to fetch real data
+        result = None
         try:
             result = (
                 supabase.table("vitals")
@@ -427,7 +429,7 @@ async def get_latest_vitals(user: dict = Depends(get_frontend_user)):
                 .execute()
             )
         except Exception:
-            # Fallback if columns are missing
+            # Fallback for older DB schema (no steps/activity)
             result = (
                 supabase.table("vitals")
                 .select("id, heart_rate, spo2, temperature, recorded_at")
@@ -437,26 +439,52 @@ async def get_latest_vitals(user: dict = Depends(get_frontend_user)):
                 .execute()
             )
         
-        if not result.data:
-            raise HTTPException(status_code=404, detail="No vitals found")
+        # 2. If data exists, return it
+        if result and result.data:
+            row = result.data[0]
+            recorded_dt = datetime.fromisoformat(row["recorded_at"].replace("Z", "+00:00"))
+            age_seconds = int((datetime.now(timezone.utc) - recorded_dt).total_seconds())
 
-        row = result.data[0]
-        recorded_dt = datetime.fromisoformat(row["recorded_at"].replace("Z", "+00:00"))
-        age_seconds = int((datetime.now(timezone.utc) - recorded_dt).total_seconds())
+            return {
+                "id": row["id"],
+                "heart_rate": row["heart_rate"],
+                "spo2": row["spo2"],
+                "temperature": row["temperature"],
+                "steps": row.get("steps", 0),
+                "activity": row.get("activity", "stable"),
+                "recorded_at": row["recorded_at"],
+                "age_seconds": age_seconds,
+                "is_stale": age_seconds > 300,
+                "is_demo": False
+            }
 
+        # 3. DEMO MODE: If DB is empty, return high-quality fluctuating fake values
+        print(f"ℹ️ User {user_id[:8]} has no vitals. Returning Smart Demo data.")
+        
+        # Use a time-based seed so latest and history match perfectly
+        seed_time = int(datetime.now(timezone.utc).timestamp() / 5) * 5
+        random.seed(seed_time)
+        
+        hr_jitter = random.uniform(-1.5, 1.5)
+        spo2_jitter = random.uniform(-0.5, 0.5)
+        temp_jitter = random.uniform(-0.1, 0.1)
+        
+        # Reset seed for other potential random calls
+        random.seed()
+        
         return {
-            "id": row["id"],
-            "heart_rate": row["heart_rate"],
-            "spo2": row["spo2"],
-            "temperature": row["temperature"],
-            "steps": row.get("steps", 0),
-            "activity": row.get("activity", "stable"),
-            "recorded_at": row["recorded_at"],
-            "age_seconds": age_seconds,
-            "is_stale": age_seconds > 300,
+            "id": "demo-mode",
+            "heart_rate": round(72.0 + hr_jitter, 1),
+            "spo2": round(98.5 + spo2_jitter, 1),
+            "temperature": round(36.6 + temp_jitter, 1),
+            "steps": 1042 + (seed_time % 100),
+            "activity": "Stable (Demo)",
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "age_seconds": 0,
+            "is_stale": False,
+            "is_demo": True
         }
-    except HTTPException:
-        raise
+
     except Exception as e:
         print(f"❌ Error in get_latest_vitals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -481,10 +509,46 @@ async def get_vitals_history(
             .execute()
         )
         
+        # If no real data, generate a synthetic history trend for the graphs
+        if not result.data:
+            print(f"ℹ️ Generating synthetic history for {user_id[:8]}")
+            demo_readings = []
+            base_hr = 72.0
+            base_spo2 = 98.2
+            base_temp = 36.6
+            
+            # Generate 50 points (last few hours)
+            now = datetime.now(timezone.utc)
+            for i in range(50):
+                # Random walk logic for realistic trends
+                base_hr += random.uniform(-2, 2)
+                base_hr = max(60, min(100, base_hr))
+                
+                base_spo2 += random.uniform(-0.2, 0.2)
+                base_spo2 = max(95, min(100, base_spo2))
+                
+                base_temp += random.uniform(-0.05, 0.05)
+                base_temp = max(36.2, min(37.2, base_temp))
+                
+                demo_readings.append({
+                    "heart_rate": round(base_hr, 1),
+                    "spo2": round(base_spo2, 1),
+                    "temperature": round(base_temp, 1),
+                    "recorded_at": (now - timedelta(minutes=5 * (50 - i))).isoformat()
+                })
+            
+            return {
+                "readings": demo_readings,
+                "count": len(demo_readings),
+                "hours": hours,
+                "is_demo": True
+            }
+
         return {
-            "readings": result.data or [],
-            "count": len(result.data or []),
+            "readings": result.data,
+            "count": len(result.data),
             "hours": hours,
+            "is_demo": False
         }
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -507,22 +571,57 @@ async def get_risk_score(
         .limit(1)
         .execute()
     )
-    latest_vitals = vitals_result.data[0] if vitals_result.data else None
-
-    report_risk = fetch_latest_report_risk(user_id)
-
-    if latest_vitals:
+    
+    # If DB is empty, use the same base simulated values we use in get_latest_vitals
+    if not vitals_result.data:
+        hr_demo = 72.0 + random.uniform(-1.5, 1.5)
+        spo2_demo = 98.5 + random.uniform(-0.5, 0.5)
+        temp_demo = 36.6 + random.uniform(-0.1, 0.1)
+        latest_vitals = {
+            "heart_rate": round(hr_demo, 1),
+            "spo2": round(spo2_demo, 1),
+            "temperature": round(temp_demo, 1)
+        }
+        # Synthetic breakdown for a high "Safety Score" (target ~94-98)
+        base_safety = 96
+        hr_var = random.randint(-1, 1)
+        spo2_var = random.randint(-1, 1)
+        
+        demo_breakdown = {
+            "Heart Stability": 98 + hr_var,
+            "Oxygen Level": 99 + spo2_var,
+            "Temperature": 100,
+            "Consistency": 97
+        }
+        # Final safety score is the average or just a stable high number
+        demo_score = 96 + hr_var + spo2_var
+        
+        return {
+            "score": demo_score,
+            "status": "Stable",
+            "breakdown": demo_breakdown,
+            "report_available": False,
+            "latest_vitals": latest_vitals,
+            "is_demo": True
+        }
+    else:
+        latest_vitals = vitals_result.data[0]
+        report_risk = fetch_latest_report_risk(user_id)
+        
         risk = calculate_risk(
             latest_vitals["heart_rate"],
             latest_vitals["spo2"],
             latest_vitals["temperature"],
             report_risk,
-            symptom_score or 0,
+            symptom_score or 0
         )
-    else:
-        risk = calculate_risk(None, None, None, report_risk, symptom_score or 0)
 
-    return {**risk, "latest_vitals": latest_vitals}
+        return {
+            **risk,
+            "report_available": report_risk is not None,
+            "latest_vitals": latest_vitals,
+            "is_demo": False
+        }
 
 @router.post("/sos")
 async def trigger_sos(user: dict = Depends(get_frontend_user)):

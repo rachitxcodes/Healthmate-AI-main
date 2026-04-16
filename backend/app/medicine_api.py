@@ -172,24 +172,29 @@ async def medicine_stats(user_id: str = Depends(get_current_user_id)):
         )
         today_taken = len(logs.data or [])
 
-        # Calculate streak: check backwards day by day
+        # ── Calculate streak: Fetch all logs for the past year in ONE query ────────────────
+        search_start = (date.today() - timedelta(days=365)).isoformat()
+        all_logs_res = (
+            supabase.table("medicine_logs")
+            .select("taken_at")
+            .eq("user_id", user_id)
+            .gte("taken_at", f"{search_start}T00:00:00")
+            .execute()
+        )
+        
+        # Convert to a set of unique dates for O(1) lookup
+        logged_dates = {datetime.fromisoformat(log["taken_at"]).date() for log in (all_logs_res.data or [])}
+        
         streak = 0
         check_date = date.today()
-        for _ in range(365):  # max 1 year lookback
-            day_str = check_date.isoformat()
-            day_logs = (
-                supabase.table("medicine_logs")
-                .select("id")
-                .eq("user_id", user_id)
-                .gte("taken_at", f"{day_str}T00:00:00")
-                .lte("taken_at", f"{day_str}T23:59:59")
-                .execute()
-            )
-            if day_logs.data and len(day_logs.data) > 0:
-                streak += 1
-                check_date -= timedelta(days=1)
-            else:
-                break
+        
+        # If no dose today, the streak might still be active from yesterday
+        if check_date not in logged_dates:
+            check_date -= timedelta(days=1)
+            
+        while check_date in logged_dates:
+            streak += 1
+            check_date -= timedelta(days=1)
 
         return {
             "streak": streak,
