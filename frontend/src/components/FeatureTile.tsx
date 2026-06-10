@@ -23,8 +23,8 @@ const tiles = [
   },
   {
     icon: BrainCircuit,
-    title: "AI Health Companion",
-    desc: "A continuous, always-learning wellness assistant that studies patterns, predicts trends, and guides you 24×7.",
+    title: "AI Doctor",
+    desc: "Your dedicated personal AI Doctor that studies medical context, explains reports, and answers health questions 24/7.",
     to: "/ai-companion",
   },
 ];

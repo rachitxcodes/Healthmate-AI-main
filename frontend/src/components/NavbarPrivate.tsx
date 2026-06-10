@@ -27,6 +27,7 @@ export default function NavbarPrivate() {
     { icon: <Dna size={18} />, label: "Risk Predictor", path: "/risk-predictor" },
     { icon: <Pill size={18} />, label: "Medicine", path: "/medicine-scheduler" },
     { icon: <Stethoscope size={18} />, label: "Symptoms", path: "/symptom-decoder" },
+    { icon: <Bot size={18} />, label: "AI Doctor", path: "/ai-companion" },
   ];
 
   const handleLogout = async () => {
@@ -93,17 +94,6 @@ export default function NavbarPrivate() {
 
         {/* Right side icons & dropdown */}
         <div className="flex items-center gap-3 pr-1">
-          <Link to="/ai-companion">
-            <motion.button
-              whileTap={{ scale: 0.96 }}
-              className="bg-primary hover:bg-primary-hover text-white px-5 py-2 rounded-full flex items-center gap-2 font-semibold text-sm shadow-soft transition-colors"
-              style={{ minHeight: '44px' }}
-            >
-              <Bot size={18} />
-              <span className="hidden sm:block">AI Chat</span>
-            </motion.button>
-          </Link>
-
           {/* Avatar Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <motion.button

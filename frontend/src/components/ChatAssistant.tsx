@@ -7,12 +7,70 @@ type Message = {
   text: string;
 };
 
+function parseBoldText(text: string) {
+  const parts = text.split("**");
+  return parts.map((part, index) => {
+    if (index % 2 === 1) {
+      return <strong key={index} className="font-bold text-slate-900">{part}</strong>;
+    }
+    return part;
+  });
+}
+
+function formatMessageText(text: string) {
+  const lines = text.split("\n");
+  let inList = false;
+  const listItems: React.ReactNode[] = [];
+  const elements: React.ReactNode[] = [];
+
+  lines.forEach((line, idx) => {
+    const cleanLine = line.trim();
+    if (!cleanLine) {
+      if (inList) {
+        elements.push(<ul key={`ul-${idx}`} className="list-disc pl-5 my-2 space-y-1">{[...listItems]}</ul>);
+        listItems.length = 0;
+        inList = false;
+      }
+      elements.push(<div key={`empty-${idx}`} className="h-2" />);
+      return;
+    }
+
+    const isBullet = cleanLine.startsWith("- ") || cleanLine.startsWith("* ") || cleanLine.startsWith("• ");
+    if (isBullet) {
+      inList = true;
+      const content = cleanLine.replace(/^[-*•]\s+/, "");
+      listItems.push(
+        <li key={`li-${idx}`} className="text-sm leading-relaxed">
+          {parseBoldText(content)}
+        </li>
+      );
+    } else {
+      if (inList) {
+        elements.push(<ul key={`ul-${idx}`} className="list-disc pl-5 my-2 space-y-1">{[...listItems]}</ul>);
+        listItems.length = 0;
+        inList = false;
+      }
+      elements.push(
+        <p key={`p-${idx}`} className="mb-2 text-sm leading-relaxed">
+          {parseBoldText(cleanLine)}
+        </p>
+      );
+    }
+  });
+
+  if (inList && listItems.length > 0) {
+    elements.push(<ul key="ul-end" className="list-disc pl-5 my-2 space-y-1">{listItems}</ul>);
+  }
+
+  return elements;
+}
+
 export default function ChatAssistant() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: "ai", text: "Hi there! I'm your HealthMate AI companion. You can ask me to explain any terms from your report or general health questions." }
+    { role: "ai", text: "Hi there! I'm your HealthMate Companion. I'm here to help you navigate and get the most out of HealthMate AI. Ask me how to track vitals, upload medical reports, schedule medications, or explore dashboard features!" }
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -33,7 +91,7 @@ export default function ChatAssistant() {
 
     try {
       const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-      const response = await fetch(`${API_URL}/api3/support-chat`, {
+      const response = await fetch(`${API_URL}/api/support-chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userMessage.text }),
@@ -98,7 +156,7 @@ export default function ChatAssistant() {
                   <Bot size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-text-primary leading-tight">AI Doctor</h3>
+                  <h3 className="font-bold text-text-primary leading-tight">HealthMate Companion</h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="w-2 h-2 rounded-full bg-status-success animate-pulse"></span>
                     <span className="text-xs font-semibold text-text-secondary">Online</span>
@@ -125,7 +183,7 @@ export default function ChatAssistant() {
                       : "bg-white text-text-primary rounded-3xl rounded-bl-sm border border-slate-100"
                     }`}
                   >
-                    {m.text}
+                    {formatMessageText(m.text)}
                   </div>
 
                   {m.role === "user" && (
@@ -156,11 +214,14 @@ export default function ChatAssistant() {
             <div className="p-4 bg-white border-t border-slate-100">
               {messages.length === 1 && (
                 <div className="flex gap-2 overflow-x-auto pb-3 mb-1 no-scrollbar">
-                  <button onClick={() => setInput("What is a lipid panel?")} className="shrink-0 bg-primary-light/20 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-colors px-4 py-1.5 rounded-full text-xs font-bold">
-                    What is a lipid panel?
+                  <button onClick={() => setInput("How do I upload a medical report?")} className="shrink-0 bg-primary-light/20 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-colors px-4 py-1.5 rounded-full text-xs font-bold">
+                    How do I upload a report?
                   </button>
-                  <button onClick={() => setInput("Is high cholesterol dangerous?")} className="shrink-0 bg-primary-light/20 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-colors px-4 py-1.5 rounded-full text-xs font-bold">
-                    Is high cholesterol dangerous?
+                  <button onClick={() => setInput("How do I track live vitals?")} className="shrink-0 bg-primary-light/20 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-colors px-4 py-1.5 rounded-full text-xs font-bold">
+                    How do I track live vitals?
+                  </button>
+                  <button onClick={() => setInput("How do I schedule my medicines?")} className="shrink-0 bg-primary-light/20 text-primary border border-primary/20 hover:bg-primary hover:text-white transition-colors px-4 py-1.5 rounded-full text-xs font-bold">
+                    How do I schedule medicines?
                   </button>
                 </div>
               )}
@@ -171,7 +232,7 @@ export default function ChatAssistant() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                   className="flex-1 px-4 py-3 bg-transparent text-text-primary text-sm font-medium outline-none placeholder-text-secondary/60"
-                  placeholder="Ask a medical question..."
+                  placeholder="Ask how to use the app..."
                 />
                 <button
                   onClick={sendMessage}

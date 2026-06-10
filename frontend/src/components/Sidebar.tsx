@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Activity, Pill, Stethoscope, Settings, LogOut, FileText, ChevronRight, HeartPulse } from "lucide-react";
+import { LayoutDashboard, Activity, Pill, Stethoscope, Settings, LogOut, FileText, ChevronRight, HeartPulse, Bot } from "lucide-react";
 import logo from "../assets/logo4.png";
 import { useAuth } from "../contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,6 +17,7 @@ export default function Sidebar() {
         { icon: <Activity size={20} />, path: "/risk-predictor", label: "Predictor" },
         { icon: <Pill size={20} />, path: "/medicine-scheduler", label: "Medicine" },
         { icon: <Stethoscope size={20} />, path: "/symptom-decoder", label: "Symptoms" },
+        { icon: <Bot size={20} />, path: "/ai-companion", label: "AI Doctor" },
     ];
 
     return (

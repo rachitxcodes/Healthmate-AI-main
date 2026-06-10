@@ -70,10 +70,12 @@ async def extract_medical_values_via_llm(image_bytes: Any, mime_type: str) -> di
     import asyncio
 
     MODELS = [
-        "google/gemma-3-4b-it:free",
-        "google/gemma-3-12b-it:free",
-        "google/gemma-3-27b-it:free",
-        "mistralai/mistral-small-3.1-24b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning-20260428:free",
+        "openrouter/free",
+        "google/gemini-2.5-flash",
+        "meta-llama/llama-3.2-11b-vision-instruct",
     ]
 
     b64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -87,6 +89,51 @@ async def extract_medical_values_via_llm(image_bytes: Any, mime_type: str) -> di
         "Also extract Age and Sex if present. "
         "Example: {\"Hemoglobin\": \"13.5 g/dL\", \"Age\": \"45\", \"Sex\": \"Male\"}"
     )
+
+    # 1. Try direct Google AI Studio Gemini API first if key exists
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        print("🔍 Trying direct Google AI Studio Gemini API first...")
+        for gemini_model in ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]:
+            try:
+                print(f"🔄 Trying direct Gemini model: {gemini_model}...")
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [
+                                {
+                                    "inlineData": {
+                                        "mimeType": mime_type,
+                                        "data": b64
+                                    }
+                                },
+                                {
+                                    "text": prompt
+                                }
+                            ]
+                        }
+                    ]
+                }
+                async with httpx.AsyncClient(timeout=60) as client:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={gemini_key}"
+                    response = await client.post(url, json=payload)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    print(f"✅ Got direct response from Gemini model {gemini_model}!")
+                    if content.startswith("```"):
+                        parts = content.split("```")
+                        content = parts[1] if len(parts) > 1 else parts[0]
+                        if content.startswith("json"):
+                            content = content[4:]
+                        content = content.strip()
+                    return json.loads(content)
+                else:
+                    print(f"⚠️ Direct Gemini model {gemini_model} failed: {response.status_code} - {response.text}")
+            except Exception as e:
+                print(f"⚠️ Direct Gemini model {gemini_model} error: {e}")
 
     # Try each model up to 3 rounds with delay between rounds
     for round in range(3):
@@ -123,8 +170,7 @@ async def extract_medical_values_via_llm(image_bytes: Any, mime_type: str) -> di
                     )
 
                 if response.status_code != 200:
-                    err = response.json().get("error", {})
-                    print(f"⚠️ {model} failed: {err.get('message', '')[:80]}")
+                    print(f"⚠️ {model} failed with status {response.status_code}. Response: {response.text}")
                     continue
 
                 content = response.json()["choices"][0]["message"]["content"].strip()

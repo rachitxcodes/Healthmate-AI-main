@@ -54,8 +54,8 @@ SYSTEM_PROMPT = (
     "End with one question. "
 
     "STRICT RULES: "
-    "Never use bullet points, numbered lists, bold, asterisks, or any markdown. "
-    "Never write more than 4 sentences per response. "
+    "You may use bullet points, bolding, and lists to structure your health information cleanly. "
+    "Never write more than 6 sentences per response. "
     "Never ask the user to share values you already have. "
     "Never give a wall of text. Short, clear, conversational always. "
     "You may reference the user's current medications when relevant. "
@@ -112,14 +112,7 @@ class HistoryOut(BaseModel):
 # --- 4. MARKDOWN STRIPPER ---
 
 def strip_markdown(text: str) -> str:
-    text = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', text)
-    text = re.sub(r'_{1,2}(.*?)_{1,2}', r'\1', text)
-    text = re.sub(r'#{1,6}\s+', '', text)
-    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'^\s*[-•*]\s+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'`{1,3}.*?`{1,3}', '', text, flags=re.DOTALL)
-    # Keep emojis, degree symbols, and accented characters by commenting out the non-ASCII stripping line
-    # text = re.sub(r'[^\x00-\x7F]+', '', text)
+    # Retain markdown so the frontend formatMessageText can render rich lists and bolding
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
@@ -241,6 +234,42 @@ def fetch_latest_report(user_id: str) -> Optional[str]:
 # --- 6. OPENROUTER CALL WITH MODEL FALLBACK ---
 
 def call_openrouter(messages_payload: list[dict]) -> str:
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        print("🔍 Trying direct Google AI Studio Gemini API first...")
+        for gemini_model in ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]:
+            try:
+                print(f"🔄 Trying direct Gemini model: {gemini_model}...")
+                system_instruction = ""
+                contents = []
+                for msg in messages_payload:
+                    role = msg["role"]
+                    content = msg["content"]
+                    if role == "system":
+                        system_instruction = content
+                    else:
+                        gemini_role = "user" if role == "user" else "model"
+                        contents.append({
+                            "role": gemini_role,
+                            "parts": [{"text": content}]
+                        })
+                payload = {"contents": contents}
+                if system_instruction:
+                    payload["systemInstruction"] = {
+                        "parts": [{"text": system_instruction}]
+                    }
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={gemini_key}"
+                resp = requests.post(url, json=payload, timeout=40)
+                if resp.status_code == 200:
+                    raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    clean_text = strip_markdown(raw_text)
+                    print(f"✅ Response from direct Gemini model {gemini_model}: {clean_text[:80]}...")
+                    return clean_text
+                else:
+                    print(f"⚠️ Direct Gemini model {gemini_model} failed with status {resp.status_code}. Response: {resp.text}")
+            except Exception as e:
+                print(f"⚠️ Direct Gemini model {gemini_model} error: {e}")
+
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",

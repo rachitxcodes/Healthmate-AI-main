@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
+import ChatAssistant from "./components/ChatAssistant";
 
 import Welcome from "./pages/Welcome";
 import Signup from "./pages/Signup";
@@ -26,6 +27,8 @@ function Private({ children }: { children: React.ReactNode }) {
         <main className="flex-1 ml-24 lg:ml-32 min-h-screen overflow-y-auto">
           {children}
         </main>
+        {/* Floating Support Chatbot widget */}
+        <ChatAssistant />
       </div>
     </ProtectedRoute>
   );

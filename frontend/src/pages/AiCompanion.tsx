@@ -10,6 +10,64 @@ type Message = {
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || "https://healthmate-api-2qu0.onrender.com";
 
+function parseBoldText(text: string) {
+  const parts = text.split("**");
+  return parts.map((part, index) => {
+    if (index % 2 === 1) {
+      return <strong key={index} className="font-bold text-slate-900">{part}</strong>;
+    }
+    return part;
+  });
+}
+
+function formatMessageText(text: string) {
+  const lines = text.split("\n");
+  let inList = false;
+  const listItems: React.ReactNode[] = [];
+  const elements: React.ReactNode[] = [];
+
+  lines.forEach((line, idx) => {
+    const cleanLine = line.trim();
+    if (!cleanLine) {
+      if (inList) {
+        elements.push(<ul key={`ul-${idx}`} className="list-disc pl-5 my-2 space-y-1">{[...listItems]}</ul>);
+        listItems.length = 0;
+        inList = false;
+      }
+      elements.push(<div key={`empty-${idx}`} className="h-2" />);
+      return;
+    }
+
+    const isBullet = cleanLine.startsWith("- ") || cleanLine.startsWith("* ") || cleanLine.startsWith("• ");
+    if (isBullet) {
+      inList = true;
+      const content = cleanLine.replace(/^[-*•]\s+/, "");
+      listItems.push(
+        <li key={`li-${idx}`} className="text-[15px] leading-relaxed">
+          {parseBoldText(content)}
+        </li>
+      );
+    } else {
+      if (inList) {
+        elements.push(<ul key={`ul-${idx}`} className="list-disc pl-5 my-2 space-y-1">{[...listItems]}</ul>);
+        listItems.length = 0;
+        inList = false;
+      }
+      elements.push(
+        <p key={`p-${idx}`} className="mb-2 text-[15px] leading-relaxed">
+          {parseBoldText(cleanLine)}
+        </p>
+      );
+    }
+  });
+
+  if (inList && listItems.length > 0) {
+    elements.push(<ul key="ul-end" className="list-disc pl-5 my-2 space-y-1">{listItems}</ul>);
+  }
+
+  return elements;
+}
+
 export default function AiCompanion() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -123,9 +181,9 @@ export default function AiCompanion() {
       <div className="mb-6 mt-4 md:mt-8 shrink-0 flex items-center justify-between">
         <div>
           <h1 className="text-3xl md:text-[2.5rem] font-bold tracking-tight text-slate-900 leading-tight mb-2">
-            AI Companion
+            AI Doctor
           </h1>
-          <p className="text-slate-500 font-semibold text-base md:text-lg">Your personal health assistant, powered by medical context.</p>
+          <p className="text-slate-500 font-semibold text-base md:text-lg">Your personal medical companion, powered by clinical context.</p>
         </div>
         {hasReportContext && (
           <div className="hidden md:flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200 shadow-sm">
@@ -189,7 +247,7 @@ export default function AiCompanion() {
                       : "bg-white text-slate-700 rounded-[1.5rem] rounded-bl-md border border-slate-200/60 shadow-[0_4px_15px_rgba(0,0,0,0.02)]"
                       }`}
                   >
-                    {m.text}
+                    {formatMessageText(m.text)}
                   </div>
 
                   {m.role === "user" && (

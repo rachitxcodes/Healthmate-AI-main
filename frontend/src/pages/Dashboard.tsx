@@ -151,7 +151,7 @@ export default function Dashboard() {
       <div className="flex h-full">
 
         {/* ── MAIN CONTENT ── */}
-        <div className="flex-1 px-6 lg:px-10 py-8 max-w-[1200px]">
+        <div className="flex-1 px-6 lg:px-10 py-8 max-w-7xl mx-auto">
 
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
@@ -427,64 +427,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── AI COMPANION RIGHT PANEL ── */}
-        <div className="hidden xl:flex w-80 flex-col py-8 pr-6 pl-2">
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] flex flex-col flex-1 overflow-hidden">
-            {/* Panel Header */}
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-6 py-5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
-                  <Sparkles size={18} className="text-white" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white text-sm">AI Companion</h3>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(110,231,183,0.8)]"></div>
-                    <span className="text-blue-100 text-[10px] font-medium">Online</span>
-                  </div>
-                </div>
-              </div>
-              <button className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
-                <MoreVertical size={16} className="text-white" />
-              </button>
-            </div>
-
-            {/* Chat area */}
-            <div className="flex-1 px-4 py-5 overflow-y-auto flex flex-col gap-4">
-              {latestAiMsg ? (
-                <>
-                  <div className="flex gap-2.5 items-start">
-                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-                      <Sparkles size={12} className="text-white" />
-                    </div>
-                    <div className="bg-slate-50 rounded-2xl rounded-tl-md px-4 py-3 text-[13px] text-slate-700 font-medium leading-relaxed border border-slate-100 max-w-[85%]">
-                      {latestAiMsg.length > 200 ? latestAiMsg.slice(0, 200) + "..." : latestAiMsg}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex gap-2.5 items-start">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-                    <Sparkles size={12} className="text-white" />
-                  </div>
-                  <div className="bg-slate-50 rounded-2xl rounded-tl-md px-4 py-3 text-[13px] text-slate-700 font-medium leading-relaxed border border-slate-100 max-w-[85%]">
-                    Hello! I'm your AI health companion. Ask me about your reports, symptoms, or general health questions.
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Input area */}
-            <div className="px-4 pb-4 pt-2 border-t border-slate-100">
-              <Link to="/ai-companion" className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-4 py-3 rounded-2xl hover:border-blue-300 focus-within:ring-2 focus-within:ring-blue-400/20 transition-all group">
-                <input type="text" placeholder="Ask a medical question..." className="flex-1 bg-transparent border-none outline-none text-[13px] font-medium placeholder:text-slate-400 text-slate-700 pointer-events-none" />
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white flex items-center justify-center group-hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] transition-shadow">
-                  <Send size={14} strokeWidth={2.5} />
-                </div>
-              </Link>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -320,13 +320,58 @@ Return ONLY this exact JSON (no markdown, no extra text):
   ]
 }}"""
 
+    # 1. Try direct Google AI Studio Gemini API first if key exists
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        print("🔍 Explain: trying direct Google AI Studio Gemini API first...")
+        for gemini_model in ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]:
+            try:
+                print(f"🔄 Trying direct Gemini model: {gemini_model}...")
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": prompt}]
+                        }
+                    ]
+                }
+                async with httpx.AsyncClient(timeout=30) as client:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={gemini_key}"
+                    response = await client.post(url, json=payload)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    print(f"✅ Explanation generated directly by Gemini model {gemini_model}")
+                    if content.startswith("```"):
+                        parts = content.split("```")
+                        content = parts[1] if len(parts) > 1 else parts[0]
+                        if content.startswith("json"):
+                            content = content[4:]
+                        content = content.strip()
+                    parsed = json.loads(content)
+                    return {
+                        "explanation": parsed.get("explanation", ""),
+                        "precautions": parsed.get("precautions", []),
+                    }
+                else:
+                    print(f"⚠️ Direct Gemini model {gemini_model} failed: {response.status_code} - {response.text}")
+            except json.JSONDecodeError:
+                print(f"⚠️ Direct Gemini model {gemini_model} returned non-JSON, using raw text fallback")
+                return {
+                    "explanation": content[:500] if 'content' in locals() else "Unable to generate explanation.",
+                    "precautions": [],
+                }
+            except Exception as e:
+                print(f"⚠️ Direct Gemini model {gemini_model} error: {e}")
+
     # Free text models — no vision needed, much less rate limited
     TEXT_MODELS = [
-        "nvidia/nemotron-nano-12b-v2-vl:free",
-        "google/gemma-3-12b-it:free",
-        "google/gemma-3-4b-it:free",
-        "mistralai/mistral-small-3.1-24b-instruct:free",
-        "meta-llama/llama-3.2-3b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "openrouter/free",
     ]
 
     last_error = None
@@ -387,4 +432,116 @@ Return ONLY this exact JSON (no markdown, no extra text):
     raise HTTPException(
         status_code=502,
         detail=f"Could not generate explanation. Try again in a moment. Last error: {last_error}"
+    )
+
+
+class SummarizeRequest(BaseModel):
+    predictions: dict[str, Any]
+    explanations: dict[str, Any]
+    extracted_data: dict[str, Any]
+
+@router.post("/summarize-report")
+async def summarize_report(body: SummarizeRequest):
+    """
+    Generates a concise 2-3 sentence overall health summary of the patient's
+    complete report and risk metrics.
+    """
+    diseases_info = []
+    for disease, pred in body.predictions.items():
+        if pred.get("ran"):
+            risk_pct = pred.get("risk_percent", "N/A")
+            exp_data = body.explanations.get(disease, {})
+            explanation = exp_data.get("explanation", "")
+            diseases_info.append(f"- {disease.replace('_', ' ').title()}: Risk is {risk_pct}. Explanation: {explanation}")
+            
+    prompt = f"""You are a professional, friendly, and compassionate medical AI assistant.
+Review the following patient analysis and write a concise, reassuring 2-3 sentence overall health summary for the patient.
+Your summary should provide a high-level picture of their health markers and direct them on what to focus on (e.g. diet, general checkup), ending on a warm, positive note. Keep it simple and clear.
+
+Analysis Details:
+{"\n".join(diseases_info)}
+
+Raw Lab Values:
+{json.dumps(body.extracted_data)}
+
+Return ONLY the summary text, do not wrap in markdown or JSON."""
+
+    # 1. Try direct Google AI Studio Gemini API first if key exists
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        print("🔍 Summary: trying direct Google AI Studio Gemini API first...")
+        for gemini_model in ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite"]:
+            try:
+                print(f"🔄 Trying direct Gemini model: {gemini_model}...")
+                payload = {
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": prompt}]
+                        }
+                    ]
+                }
+                async with httpx.AsyncClient(timeout=30) as client:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={gemini_key}"
+                    response = await client.post(url, json=payload)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    print(f"✅ Summary generated directly by Gemini model {gemini_model}")
+                    return {"summary": content}
+                else:
+                    print(f"⚠️ Direct Gemini model {gemini_model} failed: {response.status_code} - {response.text}")
+            except Exception as e:
+                print(f"⚠️ Direct Gemini model {gemini_model} error: {e}")
+
+    # 2. Fall back to OpenRouter free models
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(status_code=500, detail="No AI key available for summarization")
+
+    TEXT_MODELS = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+    ]
+
+    last_error = ""
+    for model in TEXT_MODELS:
+        try:
+            print(f"🤖 Summary: trying OpenRouter {model}...")
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "http://localhost:5173",
+                        "X-Title": "HealthMate AI",
+                    },
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 300,
+                    },
+                )
+
+            if response.status_code != 200:
+                err = response.json().get("error", {})
+                print(f"⚠️ {model} failed: {err.get('message','')[:80]}")
+                last_error = str(err)
+                continue
+
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            print(f"✅ Summary generated by OpenRouter {model}")
+            return {"summary": content}
+
+        except Exception as e:
+            print(f"❌ Error with OpenRouter {model}: {e}")
+            last_error = str(e)
+            continue
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"Could not generate report summary. Last error: {last_error}"
     )

@@ -7,6 +7,7 @@ export interface ReportRecord {
   extractedData: Record<string, string | number>;
   predictions: Record<string, any>;
   explanations: Record<string, { explanation: string; precautions: string[] }>;
+  summary?: string;
   imageSrc: string | null;
 }
 
@@ -34,6 +35,7 @@ export async function getReportHistory(): Promise<ReportRecord[]> {
       extractedData: row.report_data?.extracted_data || {},
       predictions: row.report_data?.predictions || {},
       explanations: row.report_data?.explanations || {},
+      summary: row.report_data?.summary || "",
       imageSrc: row.report_data?.imageSrc || null,
     }));
   } catch (e) {
@@ -62,6 +64,7 @@ export async function getReportById(id: string): Promise<ReportRecord | null> {
       extractedData: data.report_data?.extracted_data || {},
       predictions: data.report_data?.predictions || {},
       explanations: data.report_data?.explanations || {},
+      summary: data.report_data?.summary || "",
       imageSrc: data.report_data?.imageSrc || null,
     };
   } catch (e) {

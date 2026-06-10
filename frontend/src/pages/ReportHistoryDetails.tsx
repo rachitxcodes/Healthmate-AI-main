@@ -5,6 +5,9 @@ import { getReportById, ReportRecord } from "../utils/reportHistory";
 import GlassCard from "../components/GlassCard";
 import PrimaryButton from "../components/PrimaryButton";
 import { ArrowLeft, Clock, FileText, Activity, TrendingUp } from "lucide-react";
+import { supabase } from "../supabaseClient";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://healthmate-api-2qu0.onrender.com";
 
 function riskColor(pct: string) {
   const v = parseFloat(pct);
@@ -36,16 +39,131 @@ export default function ReportHistoryDetails() {
   const navigate = useNavigate();
   const [report, setReport] = useState<ReportRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [explanations, setExplanations] = useState<Record<string, { explanation: string; precautions: string[] }>>({});
+  const [overallSummary, setOverallSummary] = useState("");
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [loadingExplanations, setLoadingExplanations] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     async function fetchReport() {
       if (!id) return;
       const data = await getReportById(id);
-      setReport(data);
+      if (data) {
+        setReport(data);
+        setExplanations(data.explanations || {});
+        setOverallSummary(data.summary || "");
+      }
       setLoading(false);
     }
     fetchReport();
   }, [id]);
+
+  useEffect(() => {
+    if (!report || !id) return;
+
+    const ran = Object.fromEntries(
+      Object.entries(report.predictions || {}).filter(([_, v]: any) => v?.ran === true)
+    );
+    const totalDiseases = Object.keys(ran).length;
+    if (totalDiseases === 0) return;
+
+    async function fillMissingData() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const currentExplanations = { ...explanations };
+      let updatedAny = false;
+
+      // 1. Fetch missing explanations
+      for (const disease of Object.keys(ran)) {
+        const prediction = ran[disease];
+        if (!currentExplanations[disease]) {
+          setLoadingExplanations(prev => ({ ...prev, [disease]: true }));
+          try {
+            const res = await fetch(`${API_BASE_URL}/api1/explain`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({
+                disease,
+                risk_percent: prediction.risk_percent,
+                matched_features: prediction.matched_features,
+                extracted_data: report.extractedData,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              currentExplanations[disease] = {
+                explanation: data.explanation || "",
+                precautions: data.precautions || []
+              };
+              setExplanations({ ...currentExplanations });
+              updatedAny = true;
+            }
+          } catch (e) {
+            console.warn(`Failed to explain ${disease} on the fly:`, e);
+          } finally {
+            setLoadingExplanations(prev => ({ ...prev, [disease]: false }));
+          }
+        }
+      }
+
+      // 2. Fetch missing summary if all explanations are ready
+      let finalSummary = overallSummary;
+      if (Object.keys(currentExplanations).length === totalDiseases && !finalSummary) {
+        setLoadingSummary(true);
+        try {
+          const sumRes = await fetch(`${API_BASE_URL}/api1/summarize-report`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              predictions: ran,
+              explanations: currentExplanations,
+              extracted_data: report.extractedData
+            })
+          });
+          if (sumRes.ok) {
+            const sumData = await sumRes.json();
+            finalSummary = sumData.summary || "";
+            setOverallSummary(finalSummary);
+            updatedAny = true;
+          }
+        } catch (e) {
+          console.warn("Failed to summarize report on the fly:", e);
+        } finally {
+          setLoadingSummary(false);
+        }
+      }
+
+      // 3. Save to database if we generated anything new
+      if (updatedAny) {
+        try {
+          const { data: existing } = await supabase
+            .from("reports")
+            .select("report_data")
+            .eq("id", id)
+            .single();
+
+          if (existing) {
+            await supabase
+              .from("reports")
+              .update({
+                report_data: {
+                  ...existing.report_data,
+                  explanations: currentExplanations,
+                  summary: finalSummary
+                }
+              })
+              .eq("id", id);
+            console.log("✅ On-the-fly explanations and summary saved to Supabase");
+          }
+        } catch (e) {
+          console.warn("Failed to persist on-the-fly details:", e);
+        }
+      }
+    }
+
+    fillMissingData();
+  }, [report, id]);
 
   if (loading) {
     return (
@@ -77,7 +195,6 @@ export default function ReportHistoryDetails() {
   );
 
   const reportType = detectReportType(report.extractedData);
-  const explanations: Record<string, any> = (report as any).explanations || {};
 
   return (
     <div className="w-full text-text-primary min-h-[calc(100vh-80px)]">
@@ -114,7 +231,7 @@ export default function ReportHistoryDetails() {
           {/* LEFT: DISEASE RISK + EXPLANATIONS */}
           <div className="flex flex-col gap-6">
             {ranPredictions.length > 0 ? (
-              <GlassCard className={`!p-8 border-t-8 ${reportType.borderColor} h-full`}>
+              <GlassCard className={`!p-8 border-t-8 ${reportType.borderColor}`}>
                 <div className="flex items-center gap-3 mb-8 pb-6 border-b border-slate-100">
                   <div className={`${reportType.bgColor} ${reportType.color} p-2.5 rounded-xl`}>
                     <TrendingUp size={22} />
@@ -165,13 +282,44 @@ export default function ReportHistoryDetails() {
                           </div>
                         )}
 
-                        {/* EXPLANATION from saved data */}
-                        {exp?.explanation && (
-                          <div className="mt-4 pt-4 border-t border-slate-200">
-                            <p className="text-[13px] text-slate-500 font-medium leading-relaxed italic">
-                              💡 {exp.explanation}
-                            </p>
+                        {/* EXPLANATION / loading state */}
+                        {loadingExplanations[disease] ? (
+                          <div className="mt-6 pt-6 border-t border-slate-200/80 space-y-4">
+                            <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm animate-pulse space-y-3">
+                              <div className="h-4 bg-slate-200 rounded w-1/3" />
+                              <div className="h-3 bg-slate-100 rounded w-full" />
+                              <div className="h-3 bg-slate-100 rounded w-5/6" />
+                            </div>
                           </div>
+                        ) : (
+                          exp?.explanation && (
+                            <div className="mt-6 pt-6 border-t border-slate-200/80 space-y-6">
+                              <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-2.5 mb-3">
+                                  <div className="bg-rose-50 p-2 rounded-lg text-rose-500 border border-rose-100/50"><span className="text-sm">💡</span></div>
+                                  <h4 className="text-[11px] font-bold text-slate-900 uppercase tracking-widest">What This Means For You</h4>
+                                </div>
+                                <p className="text-slate-600 text-[14px] leading-relaxed font-medium">{exp.explanation}</p>
+                              </div>
+
+                              {exp.precautions && exp.precautions.length > 0 && (
+                                <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm">
+                                  <div className="flex items-center gap-2.5 mb-4">
+                                    <div className="bg-emerald-50 p-2 rounded-lg text-emerald-500 border border-emerald-100/50"><span className="text-sm">🛡️</span></div>
+                                    <h4 className="text-[11px] font-bold text-slate-900 uppercase tracking-widest">Recommended Actions</h4>
+                                  </div>
+                                  <ul className="space-y-2.5">
+                                    {exp.precautions.map((p: string, idx: number) => (
+                                      <li key={idx} className="flex items-start gap-3 text-[14px] font-medium text-slate-600 leading-relaxed p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                        <span className="shrink-0 w-6 h-6 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-xs font-bold border border-emerald-200/50">{idx + 1}</span>
+                                        <span className="mt-0.5">{p}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )
                         )}
                       </motion.div>
                     );
@@ -179,10 +327,30 @@ export default function ReportHistoryDetails() {
                 </div>
               </GlassCard>
             ) : (
-              <GlassCard className="!p-8 border-t-8 border-t-slate-200 text-center h-full">
+              <GlassCard className="!p-8 border-t-8 border-t-slate-200 text-center">
                 <Activity size={40} className="text-slate-300 mx-auto mb-4" />
                 <h3 className="font-black text-slate-500 mb-2">No Predictions Available</h3>
                 <p className="text-slate-400 text-sm">Not enough data was matched to run disease models.</p>
+              </GlassCard>
+            )}
+
+            {/* OVERALL AI REPORT SUMMARY CARD */}
+            {(overallSummary || loadingSummary) && (
+              <GlassCard className="!p-8 border-t-8 border-t-rose-500 shadow-rose-500/5 overflow-hidden">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="bg-rose-50 p-2.5 rounded-xl text-rose-500 shadow-sm border border-rose-100/50"><span className="text-xl">📊</span></div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-wider">Overall AI Health Summary</h3>
+                </div>
+                {loadingSummary ? (
+                  <div className="space-y-3 mt-4 animate-pulse">
+                    <div className="h-3 bg-slate-200/60 rounded-full w-full" />
+                    <div className="h-3 bg-slate-200/60 rounded-full w-5/6" />
+                  </div>
+                ) : (
+                  <p className="text-slate-600 text-[16px] leading-relaxed font-medium">
+                    {overallSummary}
+                  </p>
+                )}
               </GlassCard>
             )}
           </div>

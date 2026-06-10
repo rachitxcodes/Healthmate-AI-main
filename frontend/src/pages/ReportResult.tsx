@@ -119,10 +119,11 @@ async function saveReportToSupabase(
   }
 }
 
-// Update report with explanations after they load
-async function updateReportExplanations(
+// Update report with explanations and summary after they load
+async function updateReportExplanationsAndSummary(
   reportId: string,
-  explanations: Record<string, { explanation: string; precautions: string[] }>
+  explanations: Record<string, { explanation: string; precautions: string[] }>,
+  summary?: string
 ) {
   try {
     const { data: existing } = await supabase
@@ -136,13 +137,13 @@ async function updateReportExplanations(
     await supabase
       .from("reports")
       .update({
-        report_data: { ...existing.report_data, explanations }
+        report_data: { ...existing.report_data, explanations, summary: summary || "" }
       })
       .eq("id", reportId);
 
-    console.log("✅ Explanations saved to report");
+    console.log("✅ Explanations and overall summary saved to report");
   } catch (e) {
-    console.warn("⚠️ Failed to update explanations:", e);
+    console.warn("⚠️ Failed to update explanations and summary:", e);
   }
 }
 
@@ -156,6 +157,8 @@ export default function ReportResult() {
   const [results, setResults] = useState<Record<string, DiseaseResult>>({});
   const savedReportId = useRef<string | null>(null);
   const explanationsRef = useRef<Record<string, { explanation: string; precautions: string[] }>>({});
+  const [overallSummary, setOverallSummary] = useState("");
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   useEffect(() => {
     if (location.state?.triggerAnalysis && resultData) {
@@ -180,7 +183,8 @@ export default function ReportResult() {
     prediction: DiseaseResult,
     session: any,
     editableData: any,
-    totalDiseases: number
+    totalDiseases: number,
+    ran: Record<string, DiseaseResult>
   ) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api1/explain`, {
@@ -212,12 +216,32 @@ export default function ReportResult() {
         precautions: data.precautions || []
       };
 
-      // Once all explanations are done, update Supabase
+      // Once all explanations are done, fetch overall summary and update Supabase
       if (
         savedReportId.current &&
         Object.keys(explanationsRef.current).length === totalDiseases
       ) {
-        await updateReportExplanations(savedReportId.current, explanationsRef.current);
+        setLoadingSummary(true);
+        try {
+          const sumRes = await fetch(`${API_BASE_URL}/api1/summarize-report`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              predictions: ran,
+              explanations: explanationsRef.current,
+              extracted_data: editableData
+            })
+          });
+          const sumData = await sumRes.json();
+          const summaryText = sumData.summary || "";
+          setOverallSummary(summaryText);
+          await updateReportExplanationsAndSummary(savedReportId.current, explanationsRef.current, summaryText);
+        } catch (err) {
+          console.warn("Failed to generate overall report summary:", err);
+          await updateReportExplanationsAndSummary(savedReportId.current, explanationsRef.current, "");
+        } finally {
+          setLoadingSummary(false);
+        }
       }
 
     } catch {
@@ -263,7 +287,7 @@ export default function ReportResult() {
 
       // Fire explanation requests in parallel
       Object.entries(ran).forEach(([disease, prediction]) => {
-        fetchExplanation(disease, prediction, session, editableData, totalDiseases);
+        fetchExplanation(disease, prediction, session, editableData, totalDiseases, ran);
       });
 
     } catch (err: any) {
@@ -315,6 +339,26 @@ export default function ReportResult() {
                 </GlassCard>
               ) : (
                 <div className="space-y-8 w-full">
+                  {/* OVERALL AI REPORT SUMMARY CARD */}
+                  {(overallSummary || loadingSummary) && (
+                    <GlassCard className="!p-8 border-t-8 border-t-rose-500 shadow-rose-500/5 overflow-hidden">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-rose-50 p-2.5 rounded-xl text-rose-500 shadow-sm border border-rose-100/50"><span className="text-xl">📊</span></div>
+                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-wider">Overall AI Health Summary</h3>
+                      </div>
+                      {loadingSummary ? (
+                        <div className="space-y-3 mt-4">
+                          <div className="h-3 bg-slate-200/60 rounded-full w-full animate-pulse" />
+                          <div className="h-3 bg-slate-200/60 rounded-full w-5/6 animate-pulse" />
+                        </div>
+                      ) : (
+                        <p className="text-slate-600 text-[16px] leading-relaxed font-medium">
+                          {overallSummary}
+                        </p>
+                      )}
+                    </GlassCard>
+                  )}
+
                   {Object.entries(results).map(([disease, result], i) => {
                     const risk = riskColor(result.risk_percent!);
                     return (
