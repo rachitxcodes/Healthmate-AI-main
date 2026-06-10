@@ -1,103 +1,138 @@
 # File: symptom.py
-
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
-from typing import List
-import joblib
+from typing import List, Optional
 import os
-import numpy as np
+from datetime import datetime, timezone
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
-# 1. Create an APIRouter instead of a FastAPI app
-# This router will be imported and included by main.py
+load_dotenv()
+
 router = APIRouter()
 
-# --- Pydantic Model for this specific API ---
+# --- Config ---
+SUPABASE_URL = f"https://{os.getenv('SUPABASE_PROJECT_ID')}.supabase.co"
+SUPABASE_SVC_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SVC_KEY)
+
+# --- Rule-Based Scorer ---
+# Weights on a 0-100 scale for clinical concern
+SYMPTOM_RULES = {
+    "chest pain": 30,
+    "shortness of breath": 25,
+    "dizziness": 20,
+    "fever": 15,
+    "extreme fatigue": 20,
+    "nausea": 10,
+    "persistent cough": 10,
+    "body aches": 10,
+    "loss of appetite": 5,
+    "sore throat": 5,
+    "headache": 5,
+    "chills": 10,
+    "weakness": 10,
+    "fatigue": 15
+}
+
+# --- Pydantic Models ---
 class SymptomsIn(BaseModel):
     symptoms: List[str]
+    user_id: Optional[str] = None # Added for manual/hardware sync if needed
 
+class PredictOut(BaseModel):
+    total_score: int
+    risk_level: str
+    breakdown: dict
 
-# --- Globals and paths specific to the prediction logic ---
-MODEL_PATH = os.path.join("models", "symbipredict_model.joblib")
-MLB_PATH = os.path.join("models", "mlb.joblib")
-FEATURE_NAMES_PATH = os.path.join("models", "feature_names.joblib")
-
-# These will be populated at startup by the main app
-model = None
-mlb = None
-feature_names = None
-
-
-# --- The loading function (without the @app.on_event decorator) ---
+# --- Mock load_artifacts for main.py compatibility ---
 def load_artifacts():
-    """Loads ML artifacts from disk into this module's global variables."""
-    global model, mlb, feature_names
-    
-    print("Attempting to load ML model artifacts from symptom.py...")
-    if not os.path.exists(MODEL_PATH):
-        raise RuntimeError(f"Model not found at {MODEL_PATH}. Run training script first.")
-    
-    model = joblib.load(MODEL_PATH)
-    print(f"Model loaded successfully from {MODEL_PATH}")
+    """Placeholder to maintain main.py stability without ML files."""
+    print("ℹ️ Rule-Based Symptom Engine initialized (No ML artifacts required)")
 
-    if os.path.exists(MLB_PATH):
-        mlb = joblib.load(MLB_PATH)
-        print(f"MultiLabelBinarizer (mlb) loaded from {MLB_PATH}")
-    elif os.path.exists(FEATURE_NAMES_PATH):
-        feature_names = joblib.load(FEATURE_NAMES_PATH)
-        print(f"Feature names loaded from {FEATURE_NAMES_PATH}")
-    else:
-        print("Warning: Neither mlb.joblib nor feature_names.joblib found.")
-
-
-# --- Helper function for vectorizing input ---
-def vectorize_input(symptoms: List[str]) -> np.ndarray:
-    """Convert incoming symptom list to model input vector."""
-    cleaned = [s.strip().lower() for s in (symptoms or [])]
-    if mlb is not None:
-        return np.asarray(mlb.transform([cleaned])[0])
-    elif feature_names is not None:
-        sset = set(cleaned)
-        return np.array([1 if fn.lower() in sset else 0 for fn in feature_names])
-    else:
-        try:
-            n = model.n_features_in_
-            return np.zeros(n, dtype=int)
-        except AttributeError:
-            raise HTTPException(status_code=500, detail="Model is loaded, but no vectorizer (mlb/feature_names) is available.")
-
-
-# --- Endpoints attached to the router ---
-@router.get("/health", tags=["Predictions"])
-def health():
-    """Health check for the prediction service."""
-    return {"status": "ok", "service": "symptom-predictor"}
-
-
-@router.post("/predict", tags=["Predictions"])
-def predict(payload: SymptomsIn, top_k: int = Query(3, ge=1, le=20)):
+# --- Endpoints ---
+@router.post("/predict", response_model=PredictOut, tags=["Predictions"])
+def predict(payload: SymptomsIn):
     """
-    Return top-k class predictions with probabilities based on symptoms.
+    Calculate a rule-based risk score based on symptoms.
     """
-    if model is None:
-        raise HTTPException(status_code=500, detail="Model not loaded. Check server startup logs.")
+    symptoms = [s.lower() for s in payload.symptoms]
+    total_score = 0
+    breakdown = {}
 
-    vec = vectorize_input(payload.symptoms)
-    X = np.asarray(vec).reshape(1, -1)
+    for s in symptoms:
+        weight = SYMPTOM_RULES.get(s, 5) # Default weight 5 for unknown symptoms
+        total_score += weight
+        breakdown[s] = weight
+
+    # Cap at 100
+    total_score = min(100, total_score)
+
+    # Determine Severity
+    if total_score <= 15:
+        risk_level = "Stable"
+    elif total_score <= 40:
+        risk_level = "Warning"
+    else:
+        risk_level = "Critical"
+
+    return {
+        "total_score": total_score,
+        "risk_level": risk_level,
+        "breakdown": breakdown
+    }
+
+@router.post("/sync", tags=["Predictions"])
+async def sync_symptoms(payload: SymptomsIn):
+    """
+    Saves the symptom score to Supabase so the Risk Engine can use it.
+    Requires a user_id from the frontend (Supabase Auth).
+    """
+    if not payload.user_id:
+        raise HTTPException(status_code=400, detail="User ID required for sync")
+
+    # Calculate score using the same logic
+    result = predict(payload)
     
     try:
-        if hasattr(model, 'predict_proba') and hasattr(model, 'classes_'):
-            proba = model.predict_proba(X)[0]
-            classes = model.classes_
-            
-            paired = sorted(zip(classes.tolist(), proba.tolist()), key=lambda x: x[1], reverse=True)
-            top = paired[:top_k]
-            preds = [{"class": str(c), "probability": float(p)} for c, p in top]
-            
-            return {"predictions": preds}
-        else:
-            # Fallback for models without predict_proba
-            pred = model.predict(X)[0]
-            return {"predictions": [{"class": str(pred), "probability": None}]}
-            
+        supabase.table("user_symptom_scores").insert({
+            "user_id": payload.user_id,
+            "symptoms": payload.symptoms,
+            "score": result["total_score"],
+            "risk_level": result["risk_level"],
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }).execute()
+        
+        return {"status": "synced", "score": result["total_score"]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
+        print(f"❌ Sync failed: {e}")
+        raise HTTPException(status_code=500, detail="Database sync failed")
+
+
+@router.get("/latest", tags=["Predictions"])
+async def get_latest_symptoms(user_id: str = Query(...)):
+    """
+    Returns the most recently synced symptom list and score for a user.
+    Used by the frontend to restore the active symptom selection on page load.
+    """
+    try:
+        result = (
+            supabase.table("user_symptom_scores")
+            .select("symptoms, score, risk_level, created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            row = result.data[0]
+            return {
+                "symptoms": row["symptoms"],
+                "score": row["score"],
+                "risk_level": row["risk_level"],
+                "synced_at": row["created_at"]
+            }
+        return {"symptoms": [], "score": 0, "risk_level": "Stable", "synced_at": None}
+    except Exception as e:
+        print(f"⚠️ get_latest_symptoms: {e}")
+        return {"symptoms": [], "score": 0, "risk_level": "Stable", "synced_at": None}

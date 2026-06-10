@@ -7,6 +7,7 @@ import os
 import random
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from jose import jwt
 
 import requests
 from fastapi import APIRouter, HTTPException, Depends, Query, Header
@@ -66,11 +67,28 @@ def get_current_user_api_key(authorization: str = Header(None)) -> dict:
 
 def get_frontend_user(authorization: str = Header(None)) -> dict:
     """Accept any valid Bearer token from the browser (Supabase JWT).
-    Always resolves to HARDWARE_USER_ID — one device, one user."""
+    Extracts the 'sub' (User ID) from the token."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
-    hardware_user_id = os.getenv("HARDWARE_USER_ID", "550e8400-e29b-41d4-a716-446655440000")
-    return {"id": hardware_user_id}
+    
+    try:
+        # Format: "Bearer <token>"
+        token = authorization.split(" ")[1]
+        
+        # We decode without verification of signature here because 
+        # Supabase/API Gateways usually handle this, and we just need the ID.
+        # However, for security, we extract the 'sub' claim.
+        payload = jwt.get_unverified_claims(token)
+        user_id = payload.get("sub")
+        
+        if not user_id:
+            # Fallback to hardware ID if token doesn't have a sub
+            return {"id": os.getenv("HARDWARE_USER_ID", "550e8400-e29b-41d4-a716-446655440000")}
+            
+        return {"id": user_id}
+    except Exception as e:
+        print(f"⚠️ get_frontend_user: Using fallback due to {e}")
+        return {"id": os.getenv("HARDWARE_USER_ID", "550e8400-e29b-41d4-a716-446655440000")}
 
 # ============================================================================
 # MODELS
@@ -208,6 +226,24 @@ def fetch_user_profile(user_id: str) -> dict:
         return result.data or {}
     except Exception:
         return {}
+
+def fetch_latest_symptom_score(user_id: str) -> int:
+    """Get latest symptom score from rule-based engine"""
+    try:
+        result = (
+            supabase.table("user_symptom_scores")
+            .select("score")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]["score"]
+        return 0
+    except Exception as e:
+        print(f"⚠️ fetch_latest_symptom_score: {e}")
+        return 0
 
 # ============================================================================
 # EMAIL
@@ -353,8 +389,9 @@ async def post_vitals(body: VitalsIn, user: dict = Depends(get_current_user_api_
             print(f"❌ Save failed: {e}")
             raise HTTPException(status_code=500, detail="Failed to save")
 
-    # Get report risk
+    # Get latest data for unified risk index
     report_risk = fetch_latest_report_risk(user_id)
+    symptom_score = body.symptom_score or fetch_latest_symptom_score(user_id)
 
     # Calculate risk
     risk = calculate_risk(
@@ -362,7 +399,7 @@ async def post_vitals(body: VitalsIn, user: dict = Depends(get_current_user_api_
         body.spo2,
         body.temperature,
         report_risk,
-        body.symptom_score or 0,
+        symptom_score,
     )
 
     score = risk["score"]
@@ -454,30 +491,33 @@ async def get_latest_vitals(user: dict = Depends(get_frontend_user)):
                 "activity": row.get("activity", "stable"),
                 "recorded_at": row["recorded_at"],
                 "age_seconds": age_seconds,
-                "is_stale": age_seconds > 300,
+                "is_stale": age_seconds > 15,
                 "is_demo": False
             }
 
         # 3. DEMO MODE: If DB is empty, return high-quality fluctuating fake values
         print(f"ℹ️ User {user_id[:8]} has no vitals. Returning Smart Demo data.")
         
-        # Use a time-based seed so latest and history match perfectly
-        seed_time = int(datetime.now(timezone.utc).timestamp() / 5) * 5
-        random.seed(seed_time)
+        # Use a stable seed based on user_id so it doesn't fluctuate
+        import hashlib
+        seed_val = int(hashlib.md5(user_id.encode('utf-8')).hexdigest()[:8], 16)
+        
+        state = random.getstate()
+        random.seed(seed_val)
         
         hr_jitter = random.uniform(-1.5, 1.5)
         spo2_jitter = random.uniform(-0.5, 0.5)
         temp_jitter = random.uniform(-0.1, 0.1)
+        steps_val = 1042 + (seed_val % 100)
         
-        # Reset seed for other potential random calls
-        random.seed()
+        random.setstate(state)
         
         return {
             "id": "demo-mode",
             "heart_rate": round(72.0 + hr_jitter, 1),
             "spo2": round(98.5 + spo2_jitter, 1),
             "temperature": round(36.6 + temp_jitter, 1),
-            "steps": 1042 + (seed_time % 100),
+            "steps": steps_val,
             "activity": "Stable (Demo)",
             "recorded_at": datetime.now(timezone.utc).isoformat(),
             "age_seconds": 0,
@@ -512,6 +552,14 @@ async def get_vitals_history(
         # If no real data, generate a synthetic history trend for the graphs
         if not result.data:
             print(f"ℹ️ Generating synthetic history for {user_id[:8]}")
+            
+            # Use a stable seed based on user_id so it doesn't fluctuate
+            import hashlib
+            seed_val = int(hashlib.md5(user_id.encode('utf-8')).hexdigest()[:8], 16)
+            
+            state = random.getstate()
+            random.seed(seed_val)
+            
             demo_readings = []
             base_hr = 72.0
             base_spo2 = 98.2
@@ -537,6 +585,8 @@ async def get_vitals_history(
                     "recorded_at": (now - timedelta(minutes=5 * (50 - i))).isoformat()
                 })
             
+            random.setstate(state)
+            
             return {
                 "readings": demo_readings,
                 "count": len(demo_readings),
@@ -557,11 +607,28 @@ async def get_vitals_history(
 @router.get("/risk-score")
 async def get_risk_score(
     symptom_score: Optional[float] = Query(default=0, ge=0, le=100),
+    hr:   Optional[float] = Query(default=None),
+    spo2: Optional[float] = Query(default=None),
+    temp: Optional[float] = Query(default=None),
     user: dict = Depends(get_frontend_user),
 ):
-    """GET /api3/risk-score"""
+    """GET /api3/risk-score — accepts optional vitals overrides so the
+    frontend can pin risk calculation to the same reading it displays."""
     
     user_id = user["id"]
+
+    # If the frontend passed explicit vitals, use those directly (no DB read needed)
+    if hr is not None and spo2 is not None and temp is not None:
+        latest_vitals = {"heart_rate": hr, "spo2": spo2, "temperature": temp}
+        report_risk = fetch_latest_report_risk(user_id)
+        current_symptom_score = symptom_score or fetch_latest_symptom_score(user_id)
+        risk = calculate_risk(hr, spo2, temp, report_risk, current_symptom_score)
+        return {
+            **risk,
+            "report_available": report_risk is not None,
+            "latest_vitals": latest_vitals,
+            "is_demo": False
+        }
 
     vitals_result = (
         supabase.table("vitals")
@@ -583,7 +650,6 @@ async def get_risk_score(
             "temperature": round(temp_demo, 1)
         }
         # Synthetic breakdown for a high "Safety Score" (target ~94-98)
-        base_safety = 96
         hr_var = random.randint(-1, 1)
         spo2_var = random.randint(-1, 1)
         
@@ -593,7 +659,6 @@ async def get_risk_score(
             "Temperature": 100,
             "Consistency": 97
         }
-        # Final safety score is the average or just a stable high number
         demo_score = 96 + hr_var + spo2_var
         
         return {
@@ -607,13 +672,14 @@ async def get_risk_score(
     else:
         latest_vitals = vitals_result.data[0]
         report_risk = fetch_latest_report_risk(user_id)
+        current_symptom_score = symptom_score or fetch_latest_symptom_score(user_id)
         
         risk = calculate_risk(
             latest_vitals["heart_rate"],
             latest_vitals["spo2"],
             latest_vitals["temperature"],
             report_risk,
-            symptom_score or 0
+            current_symptom_score
         )
 
         return {

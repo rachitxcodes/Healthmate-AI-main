@@ -41,7 +41,7 @@ async def handle_support_query(payload: SupportChatIn):
 
     # The payload for the OpenRouter API
     json_payload = {
-        "model": "nvidia/nemotron-nano-12b-v2-vl:free",
+        "model": "google/gemma-4-31b-it:free",
         "messages": [
             {
                 "role": "system",

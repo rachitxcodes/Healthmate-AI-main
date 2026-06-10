@@ -70,23 +70,30 @@ export default function Vitals() {
 
       const headers = { Authorization: `Bearer ${session.access_token}` };
 
-      // 1. Fetch History (do this first to sync cards)
+      // 1. Fetch History first
       const historyResp = await fetch(`${API_BASE_URL}/api3/vitals/history?hours=24`, { headers });
       let currentHistory: any[] = [];
+      let isHistoryDemo = false;
       if (historyResp.ok) {
         const historyData = await historyResp.json();
         currentHistory = historyData.readings || [];
+        isHistoryDemo = !!historyData.is_demo;
         setHistory(currentHistory);
       }
 
-      // 2. Fetch Latest Vitals (as fallback/backup)
+      // 2. Determine display vitals — always use the latest history point
+      let displayHr: number | null   = null;
+      let displaySpo2: number | null = null;
+      let displayTemp: number | null = null;
+
       const vitalsResp = await fetch(`${API_BASE_URL}/api3/vitals/latest`, { headers });
       if (vitalsResp.ok) {
         const vitalsData = await vitalsResp.json();
-        
-        // SYNC LOGIC: If we have history points, use the VERY LATEST point for the cards
-        if (currentHistory.length > 0) {
+        if (currentHistory.length > 0 && !isHistoryDemo) {
           const latestPoint = currentHistory[currentHistory.length - 1];
+          displayHr   = latestPoint.heart_rate;
+          displaySpo2 = latestPoint.spo2;
+          displayTemp = latestPoint.temperature;
           setVitals({
             ...vitalsData,
             heart_rate: latestPoint.heart_rate,
@@ -95,12 +102,18 @@ export default function Vitals() {
             recorded_at: latestPoint.recorded_at
           });
         } else {
+          displayHr   = vitalsData.heart_rate;
+          displaySpo2 = vitalsData.spo2;
+          displayTemp = vitalsData.temperature;
           setVitals(vitalsData);
         }
       }
 
-      // 3. Fetch Risk Score
-      const riskResp = await fetch(`${API_BASE_URL}/api3/risk-score`, { headers });
+      // 3. Fetch Risk Score — pin to the exact same vitals we're displaying
+      const riskParams = displayHr !== null
+        ? `?hr=${displayHr}&spo2=${displaySpo2}&temp=${displayTemp}`
+        : "";
+      const riskResp = await fetch(`${API_BASE_URL}/api3/risk-score${riskParams}`, { headers });
       if (riskResp.ok) {
         const riskData = await riskResp.json();
         setRisk(riskData);
@@ -111,6 +124,7 @@ export default function Vitals() {
       console.error("Vitals fetch error:", err);
     }
   };
+
 
   useEffect(() => {
     fetchData();
@@ -198,10 +212,17 @@ export default function Vitals() {
             <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border shadow-sm ${getStatusColor(risk?.status)}`}>
               {risk?.status || "Analyzing"}
             </span>
-            <div className="flex items-center gap-1.5 text-blue-500 text-[10px] font-bold bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg shadow-sm">
-              <Clock size={12} className="animate-pulse" />
-              ONLINE SYNC
-            </div>
+            {vitals?.is_stale || vitals?.is_demo ? (
+              <div className="flex items-center gap-1.5 text-rose-500 text-[10px] font-bold bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg shadow-sm">
+                <AlertTriangle size={12} className="animate-bounce" />
+                NO HARDWARE CONNECTED
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-blue-500 text-[10px] font-bold bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg shadow-sm">
+                <Clock size={12} className="animate-pulse" />
+                ONLINE SYNC
+              </div>
+            )}
           </div>
         </div>
 
@@ -222,6 +243,26 @@ export default function Vitals() {
         </motion.button>
       </header>
 
+      {/* ── CONNECTION STATUS ALERT ── */}
+      {(vitals?.is_stale || vitals?.is_demo) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-rose-50/80 backdrop-blur-md border border-rose-100 rounded-2xl p-4 flex items-start gap-3 shadow-sm"
+        >
+          <div className="h-10 w-10 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0 text-rose-500">
+            <AlertTriangle size={20} />
+          </div>
+          <div>
+            <h4 className="text-sm font-black text-rose-900">No Hardware Connected</h4>
+            <p className="text-xs text-rose-700/90 mt-0.5 font-medium leading-relaxed">
+              The HealthMate device is not transmitting live data. Please ensure your ESP32 is plugged in and the Python bridge script is running.
+              {vitals?.is_stale ? ` (Last data received ${vitals.age_seconds}s ago at ${formatTime(vitals.recorded_at)})` : " (Showing simulated demo data)"}
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* ── TOP METRICS STRIP ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
@@ -229,20 +270,34 @@ export default function Vitals() {
           { label: "SpO2 (Oxygen)", val: vitals?.spo2, unit: "%", icon: Droplets, color: "blue", bg: "bg-blue-50" },
           { label: "Temperature", val: vitals?.temperature, unit: "°C", icon: Thermometer, color: "amber", bg: "bg-amber-50" },
           { label: "Steps", val: vitals?.steps, unit: "steps", icon: Activity, color: "emerald", bg: "bg-emerald-50", sub: vitals?.activity }
-        ].map((m, i) => (
-          <GlassCard key={i} className="!p-4 flex items-center gap-4 border-none shadow-sm hover:shadow-md transition-shadow">
-            <div className={`h-12 w-12 rounded-2xl ${m.bg} flex items-center justify-center flex-shrink-0 text-${m.color}-500`}>
-              <m.icon size={24} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-slate-400 font-bold text-[10px] uppercase truncate">{m.label}</p>
-              <h4 className="text-xl font-black text-slate-800 flex items-baseline gap-1">
-                {m.val || "--"}<span className="text-[10px] text-slate-400 font-bold tracking-tighter">{m.unit}</span>
-              </h4>
-              {m.sub && <p className="text-[9px] font-bold text-emerald-600 uppercase bg-emerald-50 px-1.5 rounded-md inline-block">{m.sub}</p>}
-            </div>
-          </GlassCard>
-        ))}
+        ].map((m, i) => {
+          const isOffline = vitals?.is_stale || vitals?.is_demo;
+          return (
+            <GlassCard key={i} className={`!p-4 flex items-center gap-4 border-none shadow-sm hover:shadow-md transition-shadow relative overflow-hidden ${isOffline ? "opacity-75" : ""}`}>
+              <div className={`h-12 w-12 rounded-2xl ${isOffline ? "bg-slate-100 text-slate-400" : `${m.bg} text-${m.color}-500`} flex items-center justify-center flex-shrink-0`}>
+                <m.icon size={24} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-slate-400 font-bold text-[10px] uppercase truncate">{m.label}</p>
+                  {isOffline && (
+                    <span className="text-[8px] font-black text-slate-500 bg-slate-100 px-1.5 py-0.25 rounded-md uppercase tracking-wider">
+                      {vitals?.is_demo ? "Demo" : "Stale"}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-xl font-black text-slate-800 flex items-baseline gap-1">
+                  {m.val || "--"}<span className="text-[10px] text-slate-400 font-bold tracking-tighter">{m.unit}</span>
+                </h4>
+                {m.sub && (
+                  <p className={`text-[9px] font-bold uppercase px-1.5 rounded-md inline-block ${isOffline ? "text-slate-500 bg-slate-100" : "text-emerald-600 bg-emerald-50"}`}>
+                    {m.sub}
+                  </p>
+                )}
+              </div>
+            </GlassCard>
+          );
+        })}
       </div>
 
       {/* ── MAIN ANALYTICS GRID ── */}
@@ -251,31 +306,44 @@ export default function Vitals() {
         {/* Sidebar: Risk (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
           <GlassCard className="flex flex-col items-center justify-center py-10 relative overflow-hidden h-full">
-            <h3 className="text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] mb-8">Unified Risk Index</h3>
+            <h3 className="text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] mb-8">Unified Safety Index</h3>
             <div className="relative w-48 h-48 flex items-center justify-center">
               <svg className="w-full h-full -rotate-90">
                 <circle cx="96" cy="96" r="80" stroke="#f1f5f9" strokeWidth="16" fill="transparent" />
                 <motion.circle
                   cx="96" cy="96" r="80" stroke={getRiskColor(risk?.score || 0)} strokeWidth="16" fill="transparent"
                   strokeDasharray="502" initial={{ strokeDashoffset: 502 }}
-                  animate={{ strokeDashoffset: 502 - (502 * (risk?.score || 0)) / 100 }}
+                  animate={{ strokeDashoffset: 502 - (502 * (100 - (risk?.score || 100))) / 100 }}
                   transition={{ duration: 1.5, ease: "easeOut" }} strokeLinecap="round"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-5xl font-black text-slate-800">{risk?.score || 0}</span>
-                <span className="text-slate-400 font-bold text-[10px] uppercase">Safety Score</span>
+                <span className="text-5xl font-black text-slate-800">{risk ? 100 - risk.score : 100}</span>
+                <span className="text-slate-400 font-bold text-[10px] uppercase tracking-tighter">Safety Score</span>
               </div>
             </div>
-            <div className="mt-8 w-full max-w-[240px] space-y-2">
+            
+            <div className="mt-8 w-full max-w-[260px] space-y-2">
+              <span className="block text-[8px] font-black text-slate-300 uppercase tracking-widest text-center mb-2">Hazard Breakdown</span>
               {risk?.breakdown && Object.entries(risk.breakdown).map(([key, val]) => (
                 typeof val === 'number' && val > 0 && (
-                  <div key={key} className="flex justify-between items-center text-[10px] bg-slate-50/80 p-2 rounded-xl border border-slate-100">
-                  <span className="font-bold text-slate-500 uppercase tracking-tighter text-[9px]">{key}</span>
-                  <span className="font-black text-slate-700">{val}%</span>
+                  <div key={key} className="flex justify-between items-center bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                    <div className="flex flex-col">
+                      <span className="font-black text-slate-700 text-[9px] uppercase tracking-tighter">
+                        {key === 'symptom_points' ? 'Symptom Concern' : 
+                         key === 'temp_points' ? 'Thermal Stability' :
+                         key === 'hr_points' ? 'Cardiac Stability' :
+                         key === 'spo2_points' ? 'Oxygen Saturation' :
+                         key === 'report_points' ? 'Lab Report Risk' : key}
+                      </span>
+                    </div>
+                    <span className="font-bold text-rose-500 text-[10px]">-{val}% Impact</span>
                   </div>
                 )
               ))}
+              {risk && !Object.values(risk.breakdown).some(v => v > 0) && (
+                <p className="text-center text-[9px] font-bold text-emerald-500 animate-pulse">All systems optimal ✓</p>
+              )}
             </div>
           </GlassCard>
         </div>

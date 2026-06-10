@@ -47,9 +47,9 @@ async def get_current_user_id(authorization: str = Header(None)):
 # ── Startup ───────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup_event():
-    print("🚀 Loading ML artifacts...")
-    load_artifacts()
-    print("✅ ML models loaded. Server ready.")
+    print("🚀 Initializing HealthMate AI Engines...")
+    load_artifacts() # Now just a placeholder in symptom.py
+    print("✅ Rule-Based Symptom Engine & Risk Index Ready.")
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(symptom_router, prefix="/api")

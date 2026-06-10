@@ -28,8 +28,8 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 router = APIRouter()
 security = HTTPBearer()
 
-PRIMARY_MODEL = "nvidia/nemotron-nano-12b-v2-vl:free"
-FALLBACK_MODEL = "mistralai/mistral-small-3.1-24b-instruct:free"
+PRIMARY_MODEL = "google/gemma-4-31b-it:free"
+FALLBACK_MODEL = "google/gemma-4-26b-a4b-it:free"
 
 SYSTEM_PROMPT = (
     "You are Dr. HealthMate, a personal AI health companion. "
@@ -118,7 +118,8 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
     text = re.sub(r'^\s*[-•*]\s+', '', text, flags=re.MULTILINE)
     text = re.sub(r'`{1,3}.*?`{1,3}', '', text, flags=re.DOTALL)
-    text = re.sub(r'[^\x00-\x7F]+', '', text)
+    # Keep emojis, degree symbols, and accented characters by commenting out the non-ASCII stripping line
+    # text = re.sub(r'[^\x00-\x7F]+', '', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
