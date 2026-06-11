@@ -16,6 +16,7 @@ import ProfileSettings from "./pages/ProfileSettings";
 import Vitals from "./pages/Vitals";
 import ReportResult from "./pages/ReportResult";
 import ReportHistoryDetails from "./pages/ReportHistoryDetails";
+import GoogleCallback from "./pages/GoogleCallback";
 import ProtectedRoute from "./utils/ProtectedRoute";
 
 // Helper to wrap private pages with Sidebar layout
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/report-history/:id" element={<Private><ReportHistoryDetails /></Private>} />
         <Route path="/report-result" element={<Private><ReportResult /></Private>} />
         <Route path="/medicine-scheduler" element={<Private><MedicineScheduler /></Private>} />
+        <Route path="/google-callback" element={<Private><GoogleCallback /></Private>} />
         <Route path="/symptom-decoder" element={<Private><SymptomDecoder /></Private>} />
         <Route path="/ai-companion" element={<Private><AiCompanion /></Private>} />
         <Route path="/vitals" element={<Private><Vitals /></Private>} />

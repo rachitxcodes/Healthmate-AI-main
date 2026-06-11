@@ -188,8 +188,13 @@ def fetch_latest_report(user_id: str) -> Optional[str]:
 
             extracted = report.get("extracted_data", {})
             predictions = report.get("predictions", {})
+            explanations = report.get("explanations", {})
+            summary = report.get("summary", "")
 
             parts = [f"Report #{i+1}: {report_name} (analyzed {created_at[:10] if created_at else 'unknown date'})"]
+
+            if summary:
+                parts.append(f"  Overall Summary: {summary}")
 
             if extracted:
                 values = ", ".join([f"{k}: {v}" for k, v in extracted.items()])
@@ -202,6 +207,15 @@ def fetch_latest_report(user_id: str) -> Optional[str]:
                         parts.append(
                             f"  {disease.replace('_', ' ').title()} risk: {risk_pct}"
                         )
+                        disease_exp = explanations.get(disease, {})
+                        if isinstance(disease_exp, dict):
+                            explanation_text = disease_exp.get("explanation", "")
+                            precautions = disease_exp.get("precautions", [])
+                            if explanation_text:
+                                parts.append(f"    Explanation: {explanation_text}")
+                            if precautions:
+                                precautions_str = ", ".join(precautions)
+                                parts.append(f"    Precautions to take: {precautions_str}")
 
             all_summaries.append("\n".join(parts))
 
@@ -221,13 +235,13 @@ def fetch_latest_report(user_id: str) -> Optional[str]:
                     med_lines.append(f"  {m['medicine_name']} ({m['dosage']}) - {m['frequency']}, times: {times_str}")
                 all_summaries.append("Current medications:\n" + "\n".join(med_lines))
         except Exception as e:
-            print(f"⚠️ Failed to fetch medicines for AI context: {e}")
+            print(f"[Warning] Failed to fetch medicines for AI context: {e}")
 
-        print(f"✅ Loaded {len(result.data)} report(s) from Supabase for user {user_id[:8]}...")
+        print(f"[Success] Loaded {len(result.data)} report(s) from Supabase for user {user_id[:8]}...")
         return "\n\n".join(all_summaries)
 
     except Exception as e:
-        print(f"⚠️ Failed to fetch latest report: {e}")
+        print(f"[Error] Failed to fetch latest report: {e}")
         return None
 
 

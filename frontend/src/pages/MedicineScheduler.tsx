@@ -19,6 +19,7 @@ interface Medicine {
   every_hours: number | null;
   is_active: boolean;
   created_at: string;
+  google_event_ids?: string[];
 }
 
 interface Stats {
@@ -45,6 +46,9 @@ export default function MedicineScheduler() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [takingId, setTakingId] = useState<string | null>(null);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   const getAuthToken = async (): Promise<string> => {
     const { data, error } = await supabase.auth.getSession();
@@ -52,7 +56,7 @@ export default function MedicineScheduler() {
     return data.session.access_token;
   };
 
-  // Fetch medicines + stats on mount
+  // Fetch medicines + stats + google calendar status on mount
   useEffect(() => {
     loadData();
   }, []);
@@ -63,9 +67,10 @@ export default function MedicineScheduler() {
       const token = await getAuthToken();
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [medsRes, statsRes] = await Promise.all([
+      const [medsRes, statsRes, googleStatusRes] = await Promise.all([
         fetch(`${API_URL}/api/medicines`, { headers }),
         fetch(`${API_URL}/api/medicines/stats`, { headers }),
+        fetch(`${API_URL}/api/google/status`, { headers }),
       ]);
 
       if (medsRes.ok) {
@@ -76,10 +81,70 @@ export default function MedicineScheduler() {
         const statsData = await statsRes.json();
         setStats(statsData);
       }
+      if (googleStatusRes.ok) {
+        const googleStatusData = await googleStatusRes.json();
+        setGoogleConnected(googleStatusData.connected);
+      }
     } catch (err) {
       console.warn("Failed to load medicine data:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleConnect = async () => {
+    setGoogleLoading(true);
+    try {
+      const token = await getAuthToken();
+      if (googleConnected) {
+        // Disconnect
+        const res = await fetch(`${API_URL}/api/google/disconnect`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          setGoogleConnected(false);
+          alert("Disconnected from Google Calendar successfully.");
+        }
+      } else {
+        // Connect
+        const res = await fetch(`${API_URL}/api/google/auth-url`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          window.location.href = data.url;
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update Google Calendar status.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleSync = async () => {
+    setSyncingAll(true);
+    try {
+      const token = await getAuthToken();
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const res = await fetch(`${API_URL}/api/google/sync?timezone=${encodeURIComponent(timezone)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        alert("All medicines synced to Google Calendar successfully!");
+        await loadData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.detail || "Failed to sync medicines.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error syncing to Google Calendar.");
+    } finally {
+      setSyncingAll(false);
     }
   };
 
@@ -110,6 +175,7 @@ export default function MedicineScheduler() {
           end_date: endDate || null,
           frequency,
           every_hours: frequency === "every_x_hours" ? parseInt(everyHours) || null : null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       });
 
@@ -177,6 +243,46 @@ export default function MedicineScheduler() {
     return `${hours}:${m} ${ampm}`;
   };
 
+  const buildGoogleCalendarUrlForTime = (med: Medicine, timeStr: string) => {
+    const title = encodeURIComponent(`💊 Take ${med.medicine_name} (${med.dosage})`);
+    const details = encodeURIComponent(
+      `Medicine reminder scheduled via HealthMate AI.\nDosage: ${med.dosage}\nScheduled Time: ${formatTime(timeStr)}\nFrequency: ${med.frequency}`
+    );
+
+    const [h, m] = timeStr.split(":");
+    const today = new Date();
+    const startStr = med.start_date ? med.start_date.replace(/-/g, "") : today.toISOString().split("T")[0].replace(/-/g, "");
+
+    const startDateTime = `${startStr}T${h.padStart(2, "0")}${m.padStart(2, "0")}00`;
+
+    const endMin = (parseInt(m) + 15) % 60;
+    const endHour = parseInt(h) + Math.floor((parseInt(m) + 15) / 60);
+    const endDateTime = `${startStr}T${String(endHour).padStart(2, "0")}${String(endMin).padStart(2, "0")}00`;
+
+    const dates = `${startDateTime}/${endDateTime}`;
+
+    let rrule = "";
+    if (med.frequency === "daily") {
+      rrule = "FREQ=DAILY";
+    } else if (med.frequency === "alternate") {
+      rrule = "FREQ=DAILY;INTERVAL=2";
+    } else if (med.frequency === "every_x_hours" && med.every_hours) {
+      rrule = `FREQ=HOURLY;INTERVAL=${med.every_hours}`;
+    }
+
+    if (med.end_date) {
+      const endStr = med.end_date.replace(/-/g, "");
+      rrule += `;UNTIL=${endStr}T235959`;
+    }
+
+    let url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}&details=${details}`;
+    if (rrule) {
+      url += `&recur=RRULE:${rrule}`;
+    }
+
+    return url;
+  };
+
   const inputClass = "mt-2 w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-800 placeholder-slate-400 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition-all font-medium";
   const labelClass = "text-sm font-semibold text-slate-700 tracking-wide";
 
@@ -190,15 +296,53 @@ export default function MedicineScheduler() {
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Medicine Scheduler</h1>
             <p className="text-slate-600 mt-1 font-medium">Track your medicine timings and stay consistent.</p>
           </div>
-          <motion.div
-            initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-            className="flex items-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 px-4 py-2 rounded-xl shadow-sm self-start sm:self-auto"
-          >
-            <Flame size={18} className="text-rose-500" />
-            <span className="font-bold text-sm tracking-wide">
-              {loading ? "..." : `${stats.streak} Day Streak`}
-            </span>
-          </motion.div>
+          <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+            {googleConnected ? (
+              <div className="flex items-center gap-2">
+                {medicines.some(med => !med.google_event_ids || med.google_event_ids.length === 0) ? (
+                  <button
+                    onClick={handleGoogleSync}
+                    disabled={syncingAll}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold tracking-wide transition-all shadow-sm bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 disabled:opacity-60"
+                  >
+                    <Calendar size={16} />
+                    {syncingAll ? "Syncing..." : "Sync Unsynced 🔄"}
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold tracking-wide bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm">
+                    <Calendar size={16} />
+                    Syncing Active ✅
+                  </div>
+                )}
+                <button
+                  onClick={handleGoogleConnect}
+                  disabled={googleLoading}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors ml-1 underline"
+                >
+                  {googleLoading ? "..." : "Disconnect"}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleGoogleConnect}
+                disabled={googleLoading}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold tracking-wide transition-all shadow-sm bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+              >
+                <Calendar size={16} />
+                {googleLoading ? "..." : "Sync Google Calendar 📅"}
+              </button>
+            )}
+
+            <motion.div
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }}
+              className="flex items-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 px-4 py-2.5 rounded-xl shadow-sm"
+            >
+              <Flame size={18} className="text-rose-500" />
+              <span className="font-bold text-sm tracking-wide">
+                {loading ? "..." : `${stats.streak} Day Streak`}
+              </span>
+            </motion.div>
+          </div>
         </div>
 
         {/* Stats Bar */}
@@ -248,6 +392,8 @@ export default function MedicineScheduler() {
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-slate-900 text-sm leading-tight">{med.medicine_name}</h3>
                         <p className="text-slate-500 text-xs font-medium mt-0.5">{med.dosage} · {med.frequency.replace(/_/g, " ")} · {med.doses_per_day}x/day</p>
+                        
+                        {/* Interactive Dose Tracking */}
                         <div className="flex gap-1.5 flex-wrap mt-2">
                           {med.times.map((t, i) => (
                             <button
@@ -265,6 +411,26 @@ export default function MedicineScheduler() {
                             </button>
                           ))}
                         </div>
+
+                        {/* Direct Google Calendar Links Fallback */}
+                        <div className="flex gap-2 flex-wrap items-center mt-3 pt-2.5 border-t border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                            <Calendar size={11} className="text-slate-400" />
+                            Add to Google Calendar manually:
+                          </span>
+                          {med.times.map((t, i) => (
+                            <a
+                              key={i}
+                              href={buildGoogleCalendarUrlForTime(med, t)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-blue-600 hover:text-blue-800 font-bold bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded transition-all"
+                            >
+                              {formatTime(t)}
+                            </a>
+                          ))}
+                        </div>
+
                       </div>
                     </div>
                     <button
