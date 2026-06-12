@@ -28,46 +28,73 @@ HealthMate AI connects these modules into a single, cohesive health ecosystem:
 * 📡 **IoT Hardware Integration:** Monitors body vitals in real-time and alerts caregivers instantly in case of emergencies (like falls or vital drops).
 
 ---
-
 ## 🏗️ System Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Client ["Client (React SPA)"]
-        UI["Dashboard & Modules"]
-        Auth["Supabase Auth"]
+flowchart LR
+
+    User[👤 Patient/User]
+
+    subgraph Frontend
+        React[React + TypeScript Dashboard]
+        Auth[Supabase Authentication]
     end
 
-    subgraph Backend ["Backend (FastAPI Web Server)"]
-        FastAPI["FastAPI App Router"]
-        OCR["OCR Engine (Gemini / Vision LLM)"]
-        ML["ML Risk Prediction Engine"]
-        LLM["Dr. HealthMate LLM Chat Context"]
-        GCal["Google Calendar OAuth Sync Handler"]
+    subgraph Backend
+        API[FastAPI API Gateway]
+        OCR[Medical Report OCR Engine]
+        ML[ML Risk Prediction Engine]
+        AI[Dr. HealthMate AI Assistant]
+        Scheduler[Medicine Scheduler Service]
     end
 
-    subgraph IoT ["IoT Monitoring (ESP32)"]
-        Sensors["Pulse, SpO2 & Temp Sensors"]
-        HW["ESP32 Vitals Device"]
+    subgraph Database
+        DB[(Supabase PostgreSQL)]
     end
 
-    subgraph DB ["Data & Services"]
-        SupaDB[("Supabase DB")]
-        SendGrid["SendGrid Email Alerts"]
-        GoogleCalendar["Google Calendar API"]
+    subgraph External_Services
+        Gemini[Gemini / OpenRouter]
+        Google[Google Calendar API]
+        SendGrid[SendGrid Email Service]
     end
 
-    %% Flow lines
-    UI -->|1. Uploads Report Image| OCR
-    OCR -->|2. Structured Values| ML
-    ML -->|3. Risk Scores| SupaDB
-    UI -->|4. Chat Queries| LLM
-    SupaDB -->|5. Injects Reports, Meds & Profile| LLM
-    UI -->|6. Connects OAuth| GCal
-    GCal -->|7. Syncs Events & Alarms| GoogleCalendar
-    Sensors -->|8. Captures Vitals| HW
-    HW -->|9. Submits Vitals & Fall Alerts| FastAPI
-    FastAPI -->|10. Triggers Emergency Mail| SendGrid
+    subgraph IoT_Monitoring
+        ESP32[ESP32 Controller]
+        Sensors[Heart Rate • SpO2 • Temperature • Fall Detection]
+    end
+
+    %% User Interactions
+    User --> React
+    React --> Auth
+    React --> API
+
+    %% Medical Report Flow
+    API --> OCR
+    OCR --> Gemini
+    OCR --> DB
+
+    %% Prediction Pipeline
+    DB --> ML
+    ML --> DB
+
+    %% AI Assistant
+    DB --> AI
+    AI --> Gemini
+
+    %% Medicine Scheduling
+    API --> Scheduler
+    Scheduler --> Google
+
+    %% Database Operations
+    API --> DB
+
+    %% IoT Monitoring
+    Sensors --> ESP32
+    ESP32 --> API
+
+    %% Emergency Alerts
+    API --> SendGrid
+
 ```
 
 ---
