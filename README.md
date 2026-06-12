@@ -38,7 +38,8 @@ flowchart TD
         Auth["Supabase Auth"]
     end
 
-    subgraph Backend ["Backend (FastAPI)"]
+    subgraph Backend ["Backend (FastAPI Web Server)"]
+        FastAPI["FastAPI App Router"]
         OCR["OCR Engine (Gemini / Vision LLM)"]
         ML["ML Risk Prediction Engine"]
         LLM["Dr. HealthMate LLM Chat Context"]
@@ -46,8 +47,8 @@ flowchart TD
     end
 
     subgraph IoT ["IoT Monitoring (ESP32)"]
-        HW["ESP32 Vitals Device"]
         Sensors["Pulse, SpO2 & Temp Sensors"]
+        HW["ESP32 Vitals Device"]
     end
 
     subgraph DB ["Data & Services"]
@@ -64,9 +65,9 @@ flowchart TD
     SupaDB -->|5. Injects Reports, Meds & Profile| LLM
     UI -->|6. Connects OAuth| GCal
     GCal -->|7. Syncs Events & Alarms| GoogleCalendar
-    HW -->|8. Reads Body Stats| Sensors
-    HW -->|9. Submits Vitals & Fall Alerts| Backend
-    Backend -->|10. Trigger Alerts| SendGrid
+    Sensors -->|8. Captures Vitals| HW
+    HW -->|9. Submits Vitals & Fall Alerts| FastAPI
+    FastAPI -->|10. Triggers Emergency Mail| SendGrid
 ```
 
 ---
