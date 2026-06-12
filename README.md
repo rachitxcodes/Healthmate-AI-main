@@ -29,47 +29,6 @@ HealthMate AI connects these modules into a single, cohesive health ecosystem:
 
 ---
 
-## 🏗️ System Architecture
-
-```mermaid
-flowchart TD
-    subgraph Client ["Client (React SPA)"]
-        UI["Dashboard & Modules"]
-        Auth["Supabase Auth"]
-    end
-
-    subgraph Backend ["Backend (FastAPI Web Server)"]
-        FastAPI["FastAPI App Router"]
-        OCR["OCR Engine (Gemini / Vision LLM)"]
-        ML["ML Risk Prediction Engine"]
-        LLM["Dr. HealthMate LLM Chat Context"]
-        GCal["Google Calendar OAuth Sync Handler"]
-    end
-
-    subgraph IoT ["IoT Monitoring (ESP32)"]
-        Sensors["Pulse, SpO2 & Temp Sensors"]
-        HW["ESP32 Vitals Device"]
-    end
-
-    subgraph DB ["Data & Services"]
-        SupaDB[("Supabase DB")]
-        SendGrid["SendGrid Email Alerts"]
-        GoogleCalendar["Google Calendar API"]
-    end
-
-    %% Flow lines
-    UI -->|1. Uploads Report Image| OCR
-    OCR -->|2. Structured Values| ML
-    ML -->|3. Risk Scores| SupaDB
-    UI -->|4. Chat Queries| LLM
-    SupaDB -->|5. Injects Reports, Meds & Profile| LLM
-    UI -->|6. Connects OAuth| GCal
-    GCal -->|7. Syncs Events & Alarms| GoogleCalendar
-    Sensors -->|8. Captures Vitals| HW
-    HW -->|9. Submits Vitals & Fall Alerts| FastAPI
-    FastAPI -->|10. Triggers Emergency Mail| SendGrid
-```
-
 ---
 
 ## 🌟 Key Features
