@@ -125,13 +125,48 @@ export default function Dashboard() {
   // Overall health status based on latest report
   const latestReport = reports[0];
   const getHealthStatus = () => {
-    if (!latestReport) return { label: "No Data", badge: "New", color: "slate" };
+    if (!latestReport) return { 
+      label: "No Data", 
+      badge: "New", 
+      textClass: "text-slate-600", 
+      bgClass: "bg-slate-50", 
+      borderClass: "border-slate-100", 
+      iconClass: "text-slate-500" 
+    };
     const risks = Object.values(latestReport.predictions).filter((p: any) => p.ran);
-    if (risks.length === 0) return { label: "Stable", badge: "Good", color: "emerald" };
+    if (risks.length === 0) return { 
+      label: "Stable", 
+      badge: "Good", 
+      textClass: "text-emerald-600", 
+      bgClass: "bg-emerald-50", 
+      borderClass: "border-emerald-100", 
+      iconClass: "text-emerald-500" 
+    };
     const avgRisk = risks.reduce((sum: number, p: any) => sum + (p.risk_probability || 0), 0) / risks.length;
-    if (avgRisk < 0.3) return { label: "Good", badge: "Good", color: "emerald" };
-    if (avgRisk < 0.6) return { label: "Fair", badge: "Monitor", color: "amber" };
-    return { label: "At Risk", badge: "Alert", color: "rose" };
+    if (avgRisk < 0.3) return { 
+      label: "Good", 
+      badge: "Good", 
+      textClass: "text-emerald-600", 
+      bgClass: "bg-emerald-50", 
+      borderClass: "border-emerald-100", 
+      iconClass: "text-emerald-500" 
+    };
+    if (avgRisk < 0.6) return { 
+      label: "Fair", 
+      badge: "Monitor", 
+      textClass: "text-amber-600", 
+      bgClass: "bg-amber-50", 
+      borderClass: "border-amber-100", 
+      iconClass: "text-amber-500" 
+    };
+    return { 
+      label: "At Risk", 
+      badge: "Alert", 
+      textClass: "text-rose-600", 
+      bgClass: "bg-rose-50", 
+      borderClass: "border-rose-100", 
+      iconClass: "text-rose-500" 
+    };
   };
   const healthStatus = getHealthStatus();
 
@@ -147,7 +182,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/40 to-indigo-50/30 text-slate-800 animate-in fade-in duration-500">
+    <div className="w-full min-h-screen bg-gradient-to-br from-surface via-rose-50/30 to-rose-100/20 text-slate-800 animate-in fade-in duration-500">
       <div className="flex h-full">
 
         {/* ── MAIN CONTENT ── */}
@@ -163,19 +198,19 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <div className="relative">
-                <button className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur border border-slate-200/60 hover:border-blue-200 hover:bg-blue-50/50 transition-all shadow-sm">
+                <button className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur border border-slate-200/60 hover:border-rose-200 hover:bg-rose-50/50 transition-all shadow-sm">
                   <Search size={18} className="text-slate-500" />
                 </button>
               </div>
-              <button className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur border border-slate-200/60 hover:border-blue-200 hover:bg-blue-50/50 transition-all shadow-sm">
+              <button className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur border border-slate-200/60 hover:border-rose-200 hover:bg-rose-50/50 transition-all shadow-sm">
                 <Calendar size={18} className="text-slate-500" />
               </button>
-              <button className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur border border-slate-200/60 hover:border-blue-200 hover:bg-blue-50/50 transition-all shadow-sm">
+              <button className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-white/80 backdrop-blur border border-slate-200/60 hover:border-rose-200 hover:bg-rose-50/50 transition-all shadow-sm">
                 <Bell size={18} className="text-slate-500" />
-                {healthInsights > 0 && <div className="absolute top-2 right-2 w-2 h-2 bg-blue-500 rounded-full"></div>}
+                {healthInsights > 0 && <div className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full"></div>}
               </button>
-              <Link to="/settings" className="flex items-center gap-2 ml-1 bg-white/80 backdrop-blur px-3 py-2 rounded-xl border border-slate-200/60 hover:border-blue-200 hover:bg-blue-50/50 shadow-sm transition-all">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white">
+              <Link to="/settings" className="flex items-center gap-2 ml-1 bg-white/80 backdrop-blur px-3 py-2 rounded-xl border border-slate-200/60 hover:border-rose-200 hover:bg-rose-50/50 shadow-sm transition-all">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-rose-500 flex items-center justify-center text-white">
                   <User size={14} />
                 </div>
                 <ChevronDown size={14} className="text-slate-400" strokeWidth={2.5} />
@@ -195,13 +230,13 @@ export default function Dashboard() {
                 {/* Overall Health */}
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
-                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(59,130,246,0.08)] hover:-translate-y-0.5 transition-all duration-300"
+                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)] hover:-translate-y-1 transition-all duration-300"
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <div className={`w-10 h-10 rounded-xl bg-${healthStatus.color}-50 border border-${healthStatus.color}-100 flex items-center justify-center`}>
-                      <Heart size={20} className={`text-${healthStatus.color}-500`} strokeWidth={1.8} />
+                    <div className={`w-10 h-10 rounded-xl ${healthStatus.bgClass} border ${healthStatus.borderClass} flex items-center justify-center`}>
+                      <Heart size={20} className={healthStatus.iconClass} strokeWidth={1.8} />
                     </div>
-                    <span className={`text-[11px] font-semibold text-${healthStatus.color}-600 bg-${healthStatus.color}-50 px-2 py-0.5 rounded-full border border-${healthStatus.color}-100`}>{healthStatus.badge}</span>
+                    <span className={`text-[11px] font-semibold ${healthStatus.textClass} ${healthStatus.bgClass} px-2 py-0.5 rounded-full border ${healthStatus.borderClass}`}>{healthStatus.badge}</span>
                   </div>
                   <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight leading-none mb-1">{healthStatus.label}</h3>
                   <p className="text-slate-400 text-xs font-medium leading-snug">Overall Health</p>
@@ -210,14 +245,14 @@ export default function Dashboard() {
                 {/* Recent Reports */}
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(59,130,246,0.08)] hover:-translate-y-0.5 transition-all duration-300"
+                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)] hover:-translate-y-1 transition-all duration-300"
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center relative">
-                      <FileText size={20} className="text-blue-500" strokeWidth={1.8} />
-                      {reportCount > 0 && <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></div>}
+                    <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center relative">
+                      <FileText size={20} className="text-primary" strokeWidth={1.8} />
+                      {reportCount > 0 && <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full border-2 border-white"></div>}
                     </div>
-                    <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">{reportCount > 0 ? "Active" : "None"}</span>
+                    <span className="text-[11px] font-semibold text-primary bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">{reportCount > 0 ? "Active" : "None"}</span>
                   </div>
                   <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight leading-none mb-1">{reportCount}</h3>
                   <p className="text-slate-400 text-xs font-medium leading-snug">Reports Analyzed</p>
@@ -226,7 +261,7 @@ export default function Dashboard() {
                 {/* Health Insights */}
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(59,130,246,0.08)] hover:-translate-y-0.5 transition-all duration-300"
+                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)] hover:-translate-y-1 transition-all duration-300"
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
@@ -241,7 +276,7 @@ export default function Dashboard() {
                 {/* Medication Adherence */}
                 <motion.div
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(59,130,246,0.08)] hover:-translate-y-0.5 transition-all duration-300"
+                  className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)] hover:-translate-y-1 transition-all duration-300"
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-10 h-10 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center">
@@ -258,7 +293,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 {/* Small stacked cards */}
                 <div className="flex flex-col gap-4">
-                  <div className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] flex-1 flex flex-col justify-center hover:shadow-[0_8px_30px_rgba(59,130,246,0.08)] transition-all duration-300">
+                  <div className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] flex-1 flex flex-col justify-center hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)] hover:-translate-y-1 transition-all duration-300">
                     <h4 className="text-slate-500 text-xs font-semibold tracking-wide uppercase mb-2">Lab Values Tracked</h4>
                     <div className="flex items-center gap-3">
                       <span className="text-3xl font-extrabold text-slate-900">
@@ -271,7 +306,7 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                  <div className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] flex-1 flex flex-col justify-center hover:shadow-[0_8px_30px_rgba(59,130,246,0.08)] transition-all duration-300">
+                  <div className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] flex-1 flex flex-col justify-center hover:shadow-[0_8px_30px_rgba(244,63,94,0.08)] hover:-translate-y-1 transition-all duration-300">
                     <h4 className="text-slate-500 text-xs font-semibold tracking-wide uppercase mb-2">Medicine Streak</h4>
                     <div className="flex items-center gap-3">
                       <span className="text-3xl font-extrabold text-slate-900">{medStats.streak}</span>
@@ -333,7 +368,7 @@ export default function Dashboard() {
               <div className="bg-white rounded-[20px] p-6 lg:p-8 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)] mb-8">
                 <div className="flex justify-between items-center mb-6">
                   <h4 className="font-bold text-slate-900 text-lg">Recent Reports</h4>
-                  <Link to="/risk-predictor" className="text-blue-500 text-sm font-semibold hover:text-blue-600 transition-colors flex items-center gap-1">
+                  <Link to="/risk-predictor" className="text-primary text-sm font-semibold hover:text-primary-hover transition-colors flex items-center gap-1">
                     Upload new <ArrowRight size={14} />
                   </Link>
                 </div>
@@ -355,10 +390,10 @@ export default function Dashboard() {
                       <Link
                         key={report.id}
                         to={`/report-history/${report.id}`}
-                        className="grid grid-cols-12 gap-4 items-center px-4 py-4 border-b border-slate-50 hover:bg-blue-50/30 rounded-xl transition-colors"
+                        className="grid grid-cols-12 gap-4 items-center px-4 py-4 border-b border-slate-50 hover:bg-rose-50/30 rounded-xl transition-colors"
                       >
                         <div className="col-span-5 flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500 shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-primary shrink-0">
                             <FileText size={16} />
                           </div>
                           <span className="text-slate-900 font-semibold text-sm truncate">{report.name}</span>
@@ -379,7 +414,7 @@ export default function Dashboard() {
                 <div className="bg-white rounded-[20px] p-6 border border-slate-100 shadow-[0_2px_20px_rgba(0,0,0,0.04)]">
                   <div className="flex justify-between items-center mb-5">
                     <h3 className="font-bold text-slate-900 text-lg">Upcoming Medicines</h3>
-                    <Link to="/medicine-scheduler" className="text-blue-500 text-xs font-bold hover:text-blue-600 transition-colors">
+                    <Link to="/medicine-scheduler" className="text-primary text-xs font-bold hover:text-primary-hover transition-colors">
                       Manage →
                     </Link>
                   </div>
@@ -390,8 +425,8 @@ export default function Dashboard() {
                       </div>
                     ) : (
                       upcomingMedicines.slice(0, 4).map((med, idx) => (
-                        <div key={idx} className="flex items-center gap-4 group cursor-pointer p-3 rounded-2xl hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-all">
-                          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white flex flex-shrink-0 items-center justify-center shadow-[0_4px_12px_rgba(59,130,246,0.25)] group-hover:-translate-y-0.5 transition-transform">
+                        <div key={idx} className="flex items-center gap-4 group cursor-pointer p-3 rounded-2xl hover:bg-rose-50/50 border border-transparent hover:border-rose-100 transition-all">
+                          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-rose-500 text-white flex flex-shrink-0 items-center justify-center shadow-[0_4px_12px_rgba(244,63,94,0.25)] group-hover:-translate-y-0.5 transition-transform">
                             <Pill size={20} />
                           </div>
                           <div>

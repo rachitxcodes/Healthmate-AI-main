@@ -311,7 +311,7 @@ export default function RiskPredictor() {
                 transition={{ duration: 0.6, delay: 0.2, type: "spring", stiffness: 200, damping: 20 }}
                 className="w-full lg:w-[60%]"
               >
-                <GlassCard className="!p-8 sm:!p-10 border-t-8 border-t-slate-800">
+                <GlassCard className="!p-8 sm:!p-10 border-t-8 border-t-primary">
                   <div className="flex items-center gap-3 mb-8 pb-6 border-b border-slate-100">
                     <div className="bg-rose-100 text-rose-600 p-2.5 rounded-xl"><Edit3 size={24} /></div>
                     <h2 className="text-2xl font-black text-slate-900 tracking-tight">Extracted Values</h2>

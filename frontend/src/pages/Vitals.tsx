@@ -195,7 +195,7 @@ export default function Vitals() {
   if (isLoading && !vitals) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} className="w-12 h-12 border-4 border-blue-100 border-t-blue-500 rounded-full" />
+        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} className="w-12 h-12 border-4 border-rose-100 border-t-primary rounded-full" />
         <p className="text-slate-400 font-bold animate-pulse">Initializing Health Monitor...</p>
       </div>
     );
@@ -218,7 +218,7 @@ export default function Vitals() {
                 NO HARDWARE CONNECTED
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 text-blue-500 text-[10px] font-bold bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg shadow-sm">
+              <div className="flex items-center gap-1.5 text-primary text-[10px] font-bold bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg shadow-sm">
                 <Clock size={12} className="animate-pulse" />
                 ONLINE SYNC
               </div>

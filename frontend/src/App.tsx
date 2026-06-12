@@ -1,8 +1,10 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 import ChatAssistant from "./components/ChatAssistant";
+import Page from "./components/Page";
 
 import Welcome from "./pages/Welcome";
 import Signup from "./pages/Signup";
@@ -26,7 +28,9 @@ function Private({ children }: { children: React.ReactNode }) {
       <div className="flex w-full min-h-screen bg-surface font-sans selection:bg-rose-200 selection:text-slate-900">
         <Sidebar />
         <main className="flex-1 ml-24 lg:ml-32 min-h-screen overflow-y-auto">
-          {children}
+          <Page>
+            {children}
+          </Page>
         </main>
         {/* Floating Support Chatbot widget */}
         <ChatAssistant />
@@ -36,10 +40,12 @@ function Private({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const location = useLocation();
+
   return (
-    <>
-      {/* Public Navbar — only shown on public pages */}
-      <Routes>
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        {/* Public Navbar — only shown on public pages */}
         <Route path="/" element={<><Navbar /><Welcome /></>} />
         <Route path="/signup" element={<><Navbar /><Signup /></>} />
         <Route path="/login" element={<><Navbar /><LoginPage /></>} />
@@ -59,6 +65,6 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-    </>
+    </AnimatePresence>
   );
 }
