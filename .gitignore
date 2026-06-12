@@ -1,12 +1,12 @@
 # ==============================
-# 🐍 Python
+# Python
 # ==============================
 
 __pycache__/
 *.py[cod]
 *$py.class
-*.pkl
-
+*.pkl\
+\
 # Virtual environments
 .venv/
 venv/
@@ -27,7 +27,7 @@ htmlcov/
 .pytest_cache/
 
 # ==============================
-# ⚛️ Node / React
+# Node / React
 # ==============================
 
 node_modules/
@@ -41,7 +41,7 @@ coverage/
 vite.svg
 
 # ==============================
-# 🔐 Environment Variables
+# Environment Variables
 # ==============================
 
 .env
@@ -49,7 +49,7 @@ vite.svg
 !.env.example
 
 # ==============================
-# 🖥 OS / Editor
+# OS / Editor
 # ==============================
 
 .DS_Store
@@ -58,7 +58,7 @@ Thumbs.db
 .idea/
 
 # ==============================
-# 📊 Data Files (optional)
+# Data Files (optional)
 # ==============================
 
 *.csv
